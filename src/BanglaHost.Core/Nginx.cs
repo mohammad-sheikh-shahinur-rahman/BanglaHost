@@ -91,6 +91,16 @@ public static class Nginx
         NginxConfig.RenderMain(cfg);
         var exe = Tools.NginxExe();
         if (exe is null || !Running()) return;
+
+        var (ok, msg) = Test(exe);
+        if (!ok) throw new BhException("nginx config test failed:\n" + msg);
+
         Run(exe, $"-s reload -p \"{NginxConfig.Fwd(NginxDir)}\" -c \"{NginxConfig.Fwd(ConfPath)}\"");
+        
+        // On Windows, if a new site binds to a port (like 443) that is already in use by another app, 
+        // `nginx -s reload` can crash the master process, leaving the server offline.
+        System.Threading.Thread.Sleep(500);
+        if (!Running())
+            throw new BhException("Nginx crashed during reload! This usually happens if port 80 or 443 is being used by another program (like IIS, Skype, or VMWare). Check your ports and try again.");
     }
 }
