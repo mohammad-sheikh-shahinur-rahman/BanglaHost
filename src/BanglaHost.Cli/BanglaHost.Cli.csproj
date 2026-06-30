@@ -4,6 +4,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>BanglaHost.Cli</RootNamespace>
     <AssemblyName>banglahost</AssemblyName>
+    <Version>1.1.0</Version>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\BanglaHost.Core\BanglaHost.Core.csproj" />

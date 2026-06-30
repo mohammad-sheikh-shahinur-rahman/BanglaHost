@@ -31,11 +31,15 @@ try
                 {
                     var name = Arg(rest, 1);
                     var f = Flags(rest.Skip(2));
-                    engine.SiteAdd(name,
+                    var type = f.GetValueOrDefault("type", "others").ToLowerInvariant();
+                    if (type == "react") engine.ReactSiteAdd(name, f.GetValueOrDefault("root"));
+                    else if (type == "nextjs" || type == "next") engine.NextJsSiteAdd(name, f.GetValueOrDefault("root"));
+                    else if (type == "vue") engine.VueSiteAdd(name, f.GetValueOrDefault("root"));
+                    else engine.SiteAdd(name,
                         php:    f.GetValueOrDefault("php", ""),
                         root:   f.GetValueOrDefault("root"),
                         server: f.GetValueOrDefault("server", ""),
-                        type:   f.GetValueOrDefault("type", "others"));
+                        type:   type);
                     break;
                 }
                 case "rm" or "remove":
@@ -49,6 +53,8 @@ try
                 case "enable":             engine.SiteEnable(Arg(rest, 1), true); break;
                 case "disable":            engine.SiteEnable(Arg(rest, 1), false); break;
                 case "root":               engine.SiteRoot(Arg(rest, 1), Arg(rest, 2)); break;
+                case "export":             engine.SiteExport(Arg(rest, 1), rest.Length > 2 ? Arg(rest, 2) : null); break;
+                case "import":             engine.SiteImport(Arg(rest, 1), Arg(rest, 2)); break;
                 case "list" or "ls" or "": engine.Status(); break;
                 default: Usage(); return 1;
             }
@@ -57,6 +63,7 @@ try
         case "php":
             switch (Arg(rest, 0))
             {
+                case "xdebug":                            engine.PhpXdebug(Arg(rest, 1), Arg(rest, 2)); break;
                 case "ini" when Arg(rest, 1) == "path":   Console.WriteLine(engine.PhpIniPath(Arg(rest, 2))); break;
                 case "ini" when Arg(rest, 1) == "reload": engine.PhpIniReload(Arg(rest, 2)); break;
                 case "ioncube":                           engine.PhpIoncube(Arg(rest, 1)); break;
@@ -67,6 +74,8 @@ try
 
         case "db":      engine.Db(Arg(rest, 0), rest.Skip(1).ToArray()); break;
         case "pg":      engine.Pg(Arg(rest, 0), rest.Skip(1).ToArray()); break;
+        case "composer": engine.Composer(rest); break;
+        case "wp":      engine.Wp(rest); break;
         case "node":    engine.Node(Arg(rest, 0), rest.Skip(1).ToArray()); break;
         case "nodesite":
             switch (Arg(rest, 0))
@@ -136,6 +145,7 @@ try
             }
             break;
         case "adminer": engine.Adminer(); break;
+        case "sqlite":  engine.PhpLiteAdmin(); break;
         case "pma" or "phpmyadmin": engine.PhpMyAdmin(); break;
         case "mailpit": engine.Mailpit(); break;
         case "tunnel":  engine.Tunnel(Arg(rest, 0), rest.Skip(1).ToArray()); break;
@@ -179,14 +189,16 @@ static void Usage() => Console.WriteLine("""
       banglahost install <nginx|php@8.4|mkcert>
       banglahost start|stop|restart [svc|all]      (svc: nginx|mariadb|mailpit|php@X)
       banglahost enable|disable <svc>
-      banglahost site add <name> [--php 8.4] [--root path] [--server nginx|apache] [--type wordpress|php|others]
-      banglahost site rm|list <name>
+      banglahost site add <name> [--php 8.4] [--root path] [--server nginx|apache] [--type wordpress|laravel|react|vue|nextjs|php|others]
+      banglahost site rm|list|export <name>
+      banglahost site import <name> <zipfile>
       banglahost site php <name> <ver> | site server <name> <nginx|apache>
       banglahost secure <domain>
       banglahost db {list|create|drop} [name]
+      banglahost composer [args...] | wp [args...]
       banglahost node {list|install|use|uninstall} [version]
-      banglahost php {ioncube <ver>|status|ini path|reload <ver>}
-      banglahost pma | adminer | mailpit            (DB UIs + mail catcher)
+      banglahost php {xdebug on|off [ver]|ioncube <ver>|status|ini path|reload <ver>}
+      banglahost pma | adminer | sqlite | mailpit   (DB UIs + mail catcher)
       banglahost tunnel {install|start|stop|url|list} [site]
       banglahost logs [--list | <file> [lines]]
       banglahost config {show | set <key> <value>}

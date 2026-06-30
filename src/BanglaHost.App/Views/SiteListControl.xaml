@@ -75,6 +75,14 @@
                                                 <MenuFlyoutSeparator/>
                                                 <MenuFlyoutItem Text="Open in code editor" Tag="{x:Bind Name}" Click="CodeEditor_Click"/>
                                                 <MenuFlyoutItem Text="Open terminal here" Tag="{x:Bind Name}" Click="Terminal_Click"/>
+                                                <MenuFlyoutItem Text="Edit .env file" Tag="{x:Bind Name}" Click="EnvEditor_Click"/>
+                                                <MenuFlyoutSeparator/>
+                                                <MenuFlyoutSubItem Text="Install App">
+                                                    <MenuFlyoutItem Text="WordPress" Tag="{x:Bind Name}" Click="InstallWordpress_Click"/>
+                                                    <MenuFlyoutItem Text="Laravel" Tag="{x:Bind Name}" Click="InstallLaravel_Click"/>
+                                                </MenuFlyoutSubItem>
+                                                <MenuFlyoutItem Text="Backup Site + DB" Tag="{x:Bind Name}" Click="Backup_Click"/>
+                                                <MenuFlyoutItem Text="Restore..." Tag="{x:Bind Name}" Click="Restore_Click"/>
                                                 <MenuFlyoutSeparator/>
                                                 <MenuFlyoutItem Text="Delete" Tag="{x:Bind Name}" Click="Remove_Click"/>
                                             </MenuFlyout>

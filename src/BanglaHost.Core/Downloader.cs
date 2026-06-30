@@ -201,7 +201,7 @@ public static class Downloader
             var text = File.ReadAllText(seed);
             // enable the extensions BanglaHost sites commonly need
             text = text.Replace(";extension_dir = \"ext\"", "extension_dir = \"ext\"");
-            foreach (var ext in new[] { "curl", "mbstring", "openssl", "mysqli", "pdo_mysql", "gd", "fileinfo", "zip", "intl", "exif" })
+            foreach (var ext in new[] { "curl", "mbstring", "openssl", "mysqli", "pdo_mysql", "pdo_sqlite", "sqlite3", "gd", "fileinfo", "zip", "intl", "exif" })
                 text = text.Replace($";extension={ext}", $"extension={ext}");
             File.WriteAllText(ini, text);
         }
@@ -322,8 +322,9 @@ public static class Downloader
 
     private static string DoInstallMariadb(string ver)
     {
-        var url = $"https://archive.mariadb.org/mariadb-{ver}/winx64-packages/mariadb-{ver}-winx64.zip";
-        var zip = DownloadToTmp(url, "mariadb.zip").GetAwaiter().GetResult();
+        // archive.mariadb.org often 404s on new releases until synced; the rest-api URL auto-redirects to a fast mirror.
+        var url = $"https://downloads.mariadb.org/rest-api/mariadb/{ver}/mariadb-{ver}-winx64.zip";
+        var zip = DownloadToTmp(url, "mariadb.zip", ua: null).GetAwaiter().GetResult();
         var dir = Path.Combine(Paths.Bin, "mariadb");
         if (Directory.Exists(dir)) Directory.Delete(dir, true);   // binaries only — data-mariadb is a separate dir
         ExtractZip(zip, dir);
@@ -403,7 +404,7 @@ public static class Downloader
     public static async Task<string> InstallApache()
     {
         var url = await LatestApacheUrl() ?? ApachePinned;
-        var zip = await DownloadToTmp(url, "httpd.zip");
+        var zip = await DownloadToTmp(url, "httpd.zip", ua: null);
         var dir = Path.Combine(Paths.Bin, "apache");
         if (Directory.Exists(dir)) Directory.Delete(dir, true);
         ExtractZip(zip, dir);   // → bin\apache\Apache24\bin\httpd.exe
@@ -576,6 +577,47 @@ public static class Downloader
         }
     }
 
+    public static async Task InstallComposer()
+    {
+        var dest = Path.Combine(Paths.Bin, "composer.phar");
+        if (!File.Exists(dest)) await CurlTo("https://getcomposer.org/composer-stable.phar", dest);
+    }
+    
+    public static async Task InstallWpCli()
+    {
+        var dest = Path.Combine(Paths.Bin, "wp-cli.phar");
+        if (!File.Exists(dest)) await CurlTo("https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar", dest);
+    }
+
+    /// <summary>Download Composer and create a new Laravel project in <paramref name="root"/>.</summary>
+    public static async Task InstallLaravel(string root, string db, string phpVersion)
+    {
+        var php = Tools.PhpExe(phpVersion) ?? throw new InvalidOperationException($"PHP {phpVersion} is required to install Laravel (php.exe not found)");
+        var composer = Path.Combine(Paths.Bin, "composer.phar");
+        await InstallComposer();
+
+        var tmp = Path.Combine(Paths.Tmp, "laravel-tmp");
+        if (Directory.Exists(tmp)) Directory.Delete(tmp, true);
+
+        // Run composer create-project (wrapped in Task.Run to not block the UI thread during the long sync shell execution)
+        await Task.Run(() => Shell(php, composer, "create-project", "laravel/laravel", tmp));
+
+        CopyDir(tmp, root);
+        Directory.Delete(tmp, true);
+
+        var env = Path.Combine(root, ".env");
+        if (File.Exists(env))
+        {
+            var txt = await File.ReadAllTextAsync(env);
+            var rootPw = Config.Load().RootPassword;
+            txt = System.Text.RegularExpressions.Regex.Replace(txt, @"DB_CONNECTION=sqlite", "DB_CONNECTION=mysql");
+            // Remove the default DB_DATABASE sqlite path line if present
+            txt = System.Text.RegularExpressions.Regex.Replace(txt, @"# DB_DATABASE=.*?\n", "");
+            txt = System.Text.RegularExpressions.Regex.Replace(txt, @"DB_DATABASE=.*", $"DB_DATABASE={db}\nDB_USERNAME=root\nDB_PASSWORD={rootPw}");
+            await File.WriteAllTextAsync(env, txt);
+        }
+    }
+
     /// <summary>Download + extract the latest phpMyAdmin into <paramref name="root"/> and write config.inc.php.</summary>
     public static async Task InstallPhpMyAdmin(string root)
     {
@@ -608,9 +650,28 @@ public static class Downloader
             $"$cfg['Servers'][$i]['AllowNoPassword'] = {allowNoPw};\n");
     }
 
-    /// <summary>Download the latest single-file Adminer to <paramref name="dest"/>.</summary>
     public static async Task InstallAdminer(string dest)
         => await CurlTo("https://www.adminer.org/latest.php", dest);
+
+    public static async Task InstallPhpLiteAdmin(string dest)
+        => await CurlTo("https://bitbucket.org/phpliteadmin/public/raw/HEAD/phpliteadmin.php", dest);
+
+    public static async Task<string> InstallMongo()
+    {
+        var url = "https://fastdl.mongodb.org/windows/mongodb-windows-x86_64-8.0.4.zip";
+        var zip = await DownloadToTmp(url, "mongodb.zip");
+        var dir = Path.Combine(Paths.Bin, "mongodb");
+        ExtractZip(zip, dir);
+        return Tools.MongoExe() ?? throw new InvalidOperationException("mongod.exe not found after extract");
+    }
+
+    public static async Task<string> InstallMeilisearch()
+    {
+        var url = "https://github.com/meilisearch/meilisearch/releases/download/v1.12.3/meilisearch-windows-amd64.exe";
+        var dest = Path.Combine(Paths.Bin, "meilisearch", "meilisearch.exe");
+        await CurlTo(url, dest);
+        return dest;
+    }
 
     static Downloader()
     {

@@ -54,6 +54,7 @@ public sealed partial class ServicesPage : Page
     {
         (ServiceRole.Php, "PHP"), (ServiceRole.Web, "Web servers"), (ServiceRole.Db, "Databases"),
         (ServiceRole.Cache, "Cache"), (ServiceRole.Mail, "Mail"), (ServiceRole.Node, "Node"), (ServiceRole.Tool, "Tools"),
+        (ServiceRole.Other, "Other"),
     };
 
     public ServicesPage() => InitializeComponent();
@@ -95,7 +96,7 @@ public sealed partial class ServicesPage : Page
             Key = s.Key, Version = BanglaHost.Core.Services.ShortVersion(s.Key, cfg),
             Installed = s.Installed, Running = s.Running, AutoStart = s.AutoStart,
             Manageable = s.Role is ServiceRole.Php
-                || s.Key is "nginx" or "apache" or "mysql" or "mariadb" or "postgresql" or "redis" or "memcached" or "mailpit",
+                || s.Key is "nginx" or "apache" or "mysql" or "mariadb" or "postgresql" or "mongodb" or "meilisearch" or "redis" or "memcached" or "mailpit",
         }).ToList();
 
         Groups.ItemsSource = Order

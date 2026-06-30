@@ -86,6 +86,10 @@ public static class Tools
     public static string? MysqlClientFor(string engine) => engine == "mariadb"
         ? (Find("mariadb", "mariadb.exe") ?? Find("mariadb", "mysql.exe") ?? Find("mysql", "mysql.exe"))
         : (Find("mysql", "mysql.exe") ?? Find("mariadb", "mariadb.exe") ?? Find("mariadb", "mysql.exe"));
+    public static string? MysqldumpExe() => Find("mariadb", "mysqldump.exe") ?? Find("mysql", "mysqldump.exe");
+    public static string? MysqldumpFor(string engine) => engine == "mariadb"
+        ? (Find("mariadb", "mariadb-dump.exe") ?? Find("mariadb", "mysqldump.exe") ?? Find("mysql", "mysqldump.exe"))
+        : (Find("mysql", "mysqldump.exe") ?? Find("mariadb", "mariadb-dump.exe") ?? Find("mariadb", "mysqldump.exe"));
     public static bool MysqlInstalled   => Find("mysql", "mysqld.exe") is not null;
     public static bool MariadbInstalled => Find("mariadb", "mysqld.exe") is not null;
     public static string? MariadbInstallDbExe() => Find("mariadb", "mariadb-install-db.exe") ?? Find("mariadb", "mysql_install_db.exe");
@@ -95,6 +99,9 @@ public static class Tools
     public static string? PgCtlExe()    => Find("postgresql", "pg_ctl.exe");
     public static string? PsqlExe()     => Find("postgresql", "psql.exe");
     public static string? InitdbExe()   => Find("postgresql", "initdb.exe");
+
+    public static string? MongoExe() => Find("mongodb", "mongod.exe");
+    public static string? MeiliExe() => Find("meilisearch", "meilisearch.exe");
     public static string? CreatedbExe() => Find("postgresql", "createdb.exe");
 
     public static string? MailpitExe() => Find("mailpit", "mailpit.exe");

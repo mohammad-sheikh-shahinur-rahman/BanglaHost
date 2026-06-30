@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using System.IO.Compression;
 
 namespace BanglaHost.Core;
 
@@ -53,7 +54,7 @@ public sealed class Engine
         if (tool == "all")
         {
             // The core stack — everything BanglaHost needs to serve a PHP site, self-contained.
-            foreach (var t in new[] { "nginx", $"php@{cfg.DefaultPhp}", "mariadb", "mkcert" }) Install(t);
+            foreach (var t in new[] { "nginx", "apache", $"php@{cfg.DefaultPhp}", "mariadb", "mkcert" }) Install(t);
             return;
         }
 
@@ -70,6 +71,8 @@ public sealed class Engine
                 "memcached"  => Get("memcached", cfg, () => Downloader.InstallMemcached()),
                 "mkcert"     => Get("mkcert",    cfg, () => Downloader.InstallMkcert()),
                 "mailpit"    => Get("mailpit",   cfg, () => Downloader.InstallMailpit()),
+                "mongodb" or "mongo" => Get("mongodb", cfg, () => Downloader.InstallMongo()),
+                "meilisearch" or "meili" => Get("meilisearch", cfg, () => Downloader.InstallMeilisearch()),
                 "fnm" or "node" => Get("fnm",    cfg, () => Downloader.InstallFnm()),
                 "python" or "python3" => Get("python", cfg, () => Downloader.InstallPython()),
                 "cloudflared" => !_force && Tools.CloudflaredExe() is not null ? Done("cloudflared") : Run("cloudflared", () => Downloader.InstallCloudflared()),
@@ -90,11 +93,11 @@ public sealed class Engine
     private List<string> RequiredServices(string type, string php, string server)
     {
         var cfg = Config.Load();
-        if (type == "node") return new List<string> { "nginx", "fnm" };
+        if (type is "node" or "nextjs" or "react") return new List<string> { "nginx", "fnm" };
         if (type == "python") return new List<string> { "nginx", "python" };
         var req = new List<string> { server == "apache" ? "apache" : "nginx" };
-        if (type is "php" or "wordpress") req.Add(Services.PhpKey(php, cfg));
-        if (type == "wordpress")
+        if (type is "php" or "wordpress" or "laravel") req.Add(Services.PhpKey(php, cfg));
+        if (type is "wordpress" or "laravel")
             req.Add(Services.Installed("mysql", cfg) && !Services.Installed("mariadb", cfg) ? "mysql" : "mariadb");
         return req;
     }
@@ -265,6 +268,10 @@ public sealed class Engine
             }
             if (Services.Enabled("postgresql", cfg) && Tools.PostgresExe() is not null && !PgServer.Running())
             { var (pok, pmsg) = PgServer.Start(); if (pok) Ok(pmsg); else Warn(pmsg); }
+            if (Services.Enabled("mongodb", cfg) && Tools.MongoExe() is not null && !MongoServer.Running())
+            { var (ok, msg) = MongoServer.Start(); if (ok) Ok(msg); else Warn(msg); }
+            if (Services.Enabled("meilisearch", cfg) && Tools.MeiliExe() is not null && !MeiliServer.Running())
+            { var (ok, msg) = MeiliServer.Start(); if (ok) Ok(msg); else Warn(msg); }
             if (Services.Enabled("redis", cfg) && Tools.RedisServerExe() is not null && Redis.Start()) Ok($"redis on :{Redis.Port}");
             if (Services.Enabled("memcached", cfg) && Tools.MemcachedExe() is not null && Memcached.Start()) Ok($"memcached on :{Memcached.Port}");
             if (Services.Enabled("mailpit", cfg) && Tools.MailpitExe() is not null && MailpitServer.Start()) Ok($"mailpit on UI :{MailpitServer.UiPort}");
@@ -279,6 +286,8 @@ public sealed class Engine
         if (svc == "nginx") { var (ok, msg) = Nginx.Start(cfg); if (ok) Ok(msg); else throw new BhException(msg); return; }
         if (svc is "mariadb" or "mysql") { var (ok, msg) = DbServer.Start(svc); if (ok) Ok(msg); else throw new BhException(msg); return; }
         if (svc is "postgresql" or "postgres") { var (ok, msg) = PgServer.Start(); if (ok) Ok(msg); else throw new BhException(msg); return; }
+        if (svc is "mongodb" or "mongo") { var (ok, msg) = MongoServer.Start(); if (ok) Ok(msg); else throw new BhException(msg); return; }
+        if (svc is "meilisearch" or "meili") { var (ok, msg) = MeiliServer.Start(); if (ok) Ok(msg); else throw new BhException(msg); return; }
         if (svc == "apache")  { var (ok, msg) = Apache.Start(); if (ok) Ok(msg); else throw new BhException(msg); return; }
         if (svc == "redis")     { if (Redis.Start()) Ok($"redis on :{Redis.Port}"); else throw new BhException("redis not installed — banglahost install redis"); return; }
         if (svc == "memcached") { if (Memcached.Start()) Ok($"memcached on :{Memcached.Port}"); else throw new BhException("memcached not installed — banglahost install memcached"); return; }
@@ -302,6 +311,8 @@ public sealed class Engine
             foreach (var v in SitePhpVersions(cfg)) { PhpCgi.Stop(v); Ok($"php-cgi {v} stopped"); }
             if (DbServer.Running()) { DbServer.Stop(); Ok("database stopped"); }
             if (PgServer.Running()) { PgServer.Stop(); Ok("PostgreSQL stopped"); }
+            if (MongoServer.Running()) { MongoServer.Stop(); Ok("mongodb stopped"); }
+            if (MeiliServer.Running()) { MeiliServer.Stop(); Ok("meilisearch stopped"); }
             if (Redis.Running()) { Redis.Stop(); Ok("redis stopped"); }
             if (Memcached.Running()) { Memcached.Stop(); Ok("memcached stopped"); }
             if (MailpitServer.Running()) { MailpitServer.Stop(); Ok("mailpit stopped"); }
@@ -312,6 +323,8 @@ public sealed class Engine
         if (svc == "nginx") { Nginx.Stop(); Ok("nginx stopped"); return; }
         if (svc is "mariadb" or "mysql") { DbServer.Stop(); Ok("database stopped"); return; }
         if (svc is "postgresql" or "postgres") { PgServer.Stop(); Ok("PostgreSQL stopped"); return; }
+        if (svc is "mongodb" or "mongo") { MongoServer.Stop(); Ok("mongodb stopped"); return; }
+        if (svc is "meilisearch" or "meili") { MeiliServer.Stop(); Ok("meilisearch stopped"); return; }
         if (svc == "apache")  { Apache.Stop(); Ok("apache stopped"); return; }
         if (svc == "redis")     { Redis.Stop(); Ok("redis stopped"); return; }
         if (svc == "memcached") { Memcached.Stop(); Ok("memcached stopped"); return; }
@@ -431,7 +444,7 @@ $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
         if (Nginx.Running()) Nginx.Reload(cfg);
         else { var (ok, msg) = Nginx.Start(cfg); if (ok) Ok(msg); else Warn(msg); }
 
-        Provision(name, type, root);
+        Provision(name, type, root, version);
         EnsureHosts(domain);
 
         Hdr($"Site '{name}' added");
@@ -440,10 +453,10 @@ $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
         Info($"php    : {phpKey}   server: {server}   type: {type}");
     }
 
-    /// <summary>Per-type setup: WordPress (DB + files + wp-config) or php (DB only).</summary>
-    private void Provision(string name, string type, string root)
+    /// <summary>Per-type setup: WordPress (DB + files + wp-config), Laravel, or php (DB only).</summary>
+    private void Provision(string name, string type, string root, string phpVersion)
     {
-        if (type is not ("php" or "wordpress")) return;
+        if (type is not ("php" or "wordpress" or "laravel")) return;
         // This site type needs a database. Make sure the server is installed + running,
         // installing it on demand (a fresh BanglaHost has no services yet).
         if (Tools.MysqldExe() is null)
@@ -466,6 +479,12 @@ $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
             Hdr("Downloading WordPress (latest)");
             try { Downloader.InstallWordPress(root, db).GetAwaiter().GetResult(); Ok("WordPress installed — open the site to finish setup (title + admin user)"); }
             catch (Exception ex) { Warn("WordPress download failed: " + ex.Message); }
+        }
+        else if (type == "laravel" && !File.Exists(Path.Combine(root, "artisan")))
+        {
+            Hdr("Installing Laravel via Composer");
+            try { Downloader.InstallLaravel(root, db, phpVersion).GetAwaiter().GetResult(); Ok("Laravel installed — open the site to view it"); }
+            catch (Exception ex) { Warn("Laravel installation failed: " + ex.Message); }
         }
     }
 
@@ -534,6 +553,147 @@ $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
             else { try { Directory.Delete(root, true); Ok($"deleted site files: {root}"); } catch (Exception ex) { Warn($"could not delete files: {ex.Message}"); } }
         }
         else Info("(site files left on disk; remove manually if desired)");
+    }
+
+    public void SiteBackup(string name, string zipPath)
+    {
+        NeedInit();
+        var (root, db) = SiteTargets(name);
+        if (!Directory.Exists(root)) throw new BhException($"Site folder not found: {root}");
+
+        var tempSql = Path.Combine(Path.GetTempPath(), $"{db}_backup_{Guid.NewGuid():N}.sql");
+        try
+        {
+            if (DbServer.Running() && Database.List().Contains(db))
+            {
+                Database.Dump(db, tempSql);
+            }
+
+            if (File.Exists(zipPath)) File.Delete(zipPath);
+
+            // Create ZIP and append site files + db dump
+            System.IO.Compression.ZipFile.CreateFromDirectory(root, zipPath, System.IO.Compression.CompressionLevel.Fastest, includeBaseDirectory: true);
+            
+            if (File.Exists(tempSql))
+            {
+                using var archive = System.IO.Compression.ZipFile.Open(zipPath, System.IO.Compression.ZipArchiveMode.Update);
+                archive.CreateEntryFromFile(tempSql, "database_dump.sql");
+            }
+            Ok($"Backed up {name} to {zipPath}");
+        }
+        finally
+        {
+            if (File.Exists(tempSql)) try { File.Delete(tempSql); } catch { }
+        }
+    }
+
+    public void SiteRestore(string name, string zipPath)
+    {
+        NeedInit();
+        if (!File.Exists(zipPath)) throw new BhException($"Backup file not found: {zipPath}");
+        var (root, db) = SiteTargets(name);
+        
+        // This is a simplified restore: unpack files over existing and import SQL if present.
+        var tempDir = Path.Combine(Path.GetTempPath(), $"restore_{Guid.NewGuid():N}");
+        try
+        {
+            System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, tempDir, overwriteFiles: true);
+            
+            // Find base directory inside temp if it was zipped with base directory
+            var extractRoot = tempDir;
+            var subDirs = Directory.GetDirectories(tempDir);
+            if (subDirs.Length == 1 && Directory.GetFiles(tempDir).Length == 0)
+                extractRoot = subDirs[0];
+
+            // Copy files back
+            if (!Directory.Exists(root)) Directory.CreateDirectory(root);
+            foreach (var f in Directory.GetFiles(extractRoot, "*", SearchOption.AllDirectories))
+            {
+                var rel = Path.GetRelativePath(extractRoot, f);
+                var dest = Path.Combine(root, rel);
+                Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+                File.Copy(f, dest, overwrite: true);
+            }
+
+            // Restore DB if present
+            var sqlFile = Path.Combine(tempDir, "database_dump.sql");
+            if (File.Exists(sqlFile))
+            {
+                if (!DbServer.Running()) throw new BhException("Database server is not running");
+                if (!Database.List().Contains(db)) Database.Create(db);
+                Database.Import(db, sqlFile);
+            }
+            Ok($"Restored {name} from {zipPath}");
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    public async Task SiteInstallApp(string name, string appType)
+    {
+        NeedInit();
+        var (root, db) = SiteTargets(name);
+        if (!Directory.Exists(root)) throw new BhException($"Site folder not found: {root}");
+
+        if (appType.Equals("wordpress", StringComparison.OrdinalIgnoreCase))
+        {
+            Info("Downloading WordPress...");
+            var zipFile = Path.Combine(Path.GetTempPath(), $"wp_{Guid.NewGuid():N}.zip");
+            try
+            {
+                using var client = new System.Net.Http.HttpClient();
+                using var s = await client.GetStreamAsync("https://wordpress.org/latest.zip");
+                using var fs = File.Create(zipFile);
+                await s.CopyToAsync(fs);
+                fs.Close();
+
+                Info("Extracting WordPress...");
+                System.IO.Compression.ZipFile.ExtractToDirectory(zipFile, root, overwriteFiles: true);
+
+                var wpFolder = Path.Combine(root, "wordpress");
+                if (Directory.Exists(wpFolder))
+                {
+                    foreach (var d in Directory.GetDirectories(wpFolder))
+                        Directory.Move(d, Path.Combine(root, Path.GetFileName(d)));
+                    foreach (var f in Directory.GetFiles(wpFolder))
+                        File.Move(f, Path.Combine(root, Path.GetFileName(f)), true);
+                    Directory.Delete(wpFolder);
+                }
+
+                var sample = Path.Combine(root, "wp-config-sample.php");
+                var cfg = Path.Combine(root, "wp-config.php");
+                if (File.Exists(sample))
+                {
+                    var text = File.ReadAllText(sample);
+                    text = text.Replace("database_name_here", db);
+                    text = text.Replace("username_here", "root");
+                    text = text.Replace("password_here", Database.HasRootPassword ? Config.Load().RootPassword : "");
+                    text = text.Replace("localhost", "127.0.0.1");
+                    File.WriteAllText(cfg, text);
+                    Ok($"WordPress installed at {root} (database pre-configured)");
+                }
+            }
+            finally
+            {
+                if (File.Exists(zipFile)) try { File.Delete(zipFile); } catch { }
+            }
+        }
+        else if (appType.Equals("laravel", StringComparison.OrdinalIgnoreCase))
+        {
+            Info("Installing Laravel via Composer...");
+            var conf = Path.Combine(Paths.NginxSites, $"{name}.conf");
+            if (!File.Exists(conf)) conf += ".disabled";
+            var phpVersion = File.Exists(conf) ? ParseVhost(conf).phpKey : Config.Load().DefaultPhp;
+            
+            await Downloader.InstallLaravel(root, db, phpVersion);
+            Ok($"Laravel installed at {root}");
+        }
+        else
+        {
+            throw new BhException($"Unknown app type: {appType}");
+        }
     }
 
     public void SitePhp(string name, string version)
@@ -606,7 +766,7 @@ $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
         if (server == "apache")
         {
             Apache.RenderVhost(name, domain, root, phpKey, cfg);
-            Apache.Start();
+            var (aok, amsg) = Apache.Start(); if (aok) Ok(amsg); else Warn(amsg);
             NginxConfig.RenderApacheFront(name, domain, root, phpKey, Apache.Port, cfg);
         }
         else NginxConfig.RenderPhpVhost(name, domain, root, phpKey, cfg);
@@ -618,6 +778,70 @@ $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
     private static bool AnyApacheSite() =>
         Directory.Exists(Paths.NginxSites) &&
         Directory.EnumerateFiles(Paths.NginxSites, "*.conf").Any(f => File.ReadAllText(f).Contains("server=apache"));
+
+    public void SiteExport(string name, string? zipPath = null)
+    {
+        NeedInit();
+        var (root, db) = SiteTargets(name);
+        if (!Directory.Exists(root)) throw new BhException($"Site '{name}' root folder not found: {root}");
+        
+        if (zipPath == null)
+        {
+            var desktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+            zipPath = Path.Combine(desktop, $"{name}_export.zip");
+        }
+        
+        Hdr($"Exporting site '{name}' to {zipPath}");
+        
+        var dbFile = Path.Combine(root, "database.sql");
+        var dbCreated = false;
+        if (Database.List().Contains(db))
+        {
+            Info($"Exporting database '{db}'...");
+            Database.Dump(db, dbFile);
+            dbCreated = true;
+        }
+        
+        if (File.Exists(zipPath)) File.Delete(zipPath);
+        System.IO.Compression.ZipFile.CreateFromDirectory(root, zipPath, System.IO.Compression.CompressionLevel.Fastest, false);
+        
+        if (dbCreated && File.Exists(dbFile)) File.Delete(dbFile);
+        
+        Ok($"Exported to {zipPath}");
+    }
+
+    public void SiteImport(string name, string zipPath)
+    {
+        NeedInit();
+        if (!File.Exists(zipPath)) throw new BhException($"Zip file not found: {zipPath}");
+        
+        var cfg = Config.Load();
+        var root = Path.Combine(cfg.SitesRoot, name);
+        if (Directory.Exists(root)) throw new BhException($"Site folder already exists: {root}");
+        
+        Hdr($"Importing site '{name}' from {zipPath}");
+        System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, root);
+        
+        var dbFile = Path.Combine(root, "database.sql");
+        if (File.Exists(dbFile))
+        {
+            var db = System.Text.RegularExpressions.Regex.Replace(name, "[^A-Za-z0-9_]", "_");
+            Info($"Importing database '{db}'...");
+            if (Tools.MysqldExe() is null) Downloader.InstallDb().GetAwaiter().GetResult();
+            if (!DbServer.Running()) DbServer.Start();
+            
+            try { Database.Create(db); } catch { }
+            Database.Import(db, dbFile);
+            File.Delete(dbFile);
+            
+            SiteAdd(name, root: root, type: "php");
+        }
+        else
+        {
+            SiteAdd(name, root: root, type: "others");
+        }
+        Ok($"Imported '{name}' successfully.");
+    }
 
     public void Secure(string domain)
     {
@@ -798,6 +1022,39 @@ $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
         else Info($"php {version} not running — changes apply on next start");
     }
 
+    public void PhpXdebug(string onOff, string version)
+    {
+        NeedInit();
+        var enable = onOff == "on";
+        var cfg = Config.Load();
+        if (string.IsNullOrEmpty(version)) version = cfg.DefaultPhp;
+        version = Services.PhpVersion(Services.PhpKey(version, cfg), cfg);
+        var ini = PhpIniPath(version);
+        if (!File.Exists(ini)) throw new BhException($"php {version} not found");
+        var text = File.ReadAllText(ini);
+        
+        bool hasXdebug = text.Contains("zend_extension=xdebug");
+        if (enable && !hasXdebug)
+        {
+            text += "\n[xdebug]\nzend_extension=xdebug\nxdebug.mode=debug\nxdebug.client_port=9003\nxdebug.start_with_request=yes\n";
+            File.WriteAllText(ini, text);
+            PhpIniReload(version);
+            Ok($"xdebug enabled for php {version}");
+        }
+        else if (!enable && hasXdebug)
+        {
+            var lines = text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None).ToList();
+            lines.RemoveAll(l => l.StartsWith("zend_extension=xdebug") || l.StartsWith("xdebug."));
+            File.WriteAllText(ini, string.Join("\n", lines));
+            PhpIniReload(version);
+            Ok($"xdebug disabled for php {version}");
+        }
+        else
+        {
+            Ok($"xdebug already {(enable ? "enabled" : "disabled")} for php {version}");
+        }
+    }
+
     public void PhpIoncube(string version)
     {
         NeedInit();
@@ -930,6 +1187,33 @@ $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
     private static int ParsePort(string v, string key) =>
         int.TryParse(v, out var p) && p is > 0 and < 65536 ? p : throw new BhException($"{key} must be a port number");
 
+    /// <summary>Apply the Networking page's routing settings: persist LAN sharing / QUIC (HTTP/2) /
+    /// custom TLD / port-forwarding, regenerate every vhost + the main config with those settings,
+    /// and restart nginx if it's running so the new listen directives take effect.</summary>
+    public void ApplyNetworking(bool lanSharing, bool quicEnabled, string tld, string portForwarding)
+    {
+        NeedInit();
+        var cfg = Config.Load();
+        tld = (tld ?? "").Trim().TrimStart('.');
+        if (tld.Length > 0 && !Regex.IsMatch(tld, "^[a-z][a-z0-9-]*$"))
+            throw new BhException("tld must be lowercase letters/digits/hyphen");
+
+        var tldChanged = tld.Length > 0 && tld != cfg.Tld;
+        cfg.LanSharing     = lanSharing;
+        cfg.QuicEnabled    = quicEnabled;
+        cfg.PortForwarding = (portForwarding ?? "").Trim();
+        if (tld.Length > 0) cfg.Tld = tld;
+        cfg.Save();
+
+        RegenVhosts(cfg);
+        NginxConfig.RenderMain(cfg);
+        if (Nginx.Running()) Restart("nginx");
+
+        Ok($"Routing applied — LAN sharing {(lanSharing ? "on" : "off")}, HTTP/2 {(quicEnabled ? "on" : "off")}, TLD .{cfg.Tld}"
+           + (Nginx.Running() ? " (nginx restarted)" : " (start nginx to serve)"));
+        if (tldChanged) Warn($"TLD changed — re-issue HTTPS per site: banglahost secure <name>.{cfg.Tld}");
+    }
+
     /// <summary>Re-render every site vhost (e.g. after a TLD/port change), proxy sites included.</summary>
     private static void RegenVhosts(Config cfg)
     {
@@ -987,6 +1271,40 @@ $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
     public bool DbHasRootPassword() { NeedInit(); return Database.HasRootPassword; }
 
     /// <summary>PostgreSQL database ops (mirrors Db, but for the postgres server).</summary>
+    public void Composer(string[] args)
+    {
+        NeedInit();
+        var php = Tools.PhpExe(Config.Load().DefaultPhp) ?? throw new BhException("PHP not installed");
+        var composer = Path.Combine(Paths.Bin, "composer.phar");
+        if (!File.Exists(composer))
+        {
+            Console.WriteLine("Downloading composer...");
+            Downloader.InstallComposer().GetAwaiter().GetResult();
+        }
+        var psi = new System.Diagnostics.ProcessStartInfo { FileName = php, UseShellExecute = false };
+        psi.ArgumentList.Add(composer);
+        foreach (var a in args) psi.ArgumentList.Add(a);
+        var p = System.Diagnostics.Process.Start(psi)!;
+        p.WaitForExit();
+    }
+    
+    public void Wp(string[] args)
+    {
+        NeedInit();
+        var php = Tools.PhpExe(Config.Load().DefaultPhp) ?? throw new BhException("PHP not installed");
+        var wp = Path.Combine(Paths.Bin, "wp-cli.phar");
+        if (!File.Exists(wp))
+        {
+            Console.WriteLine("Downloading wp-cli...");
+            Downloader.InstallWpCli().GetAwaiter().GetResult();
+        }
+        var psi = new System.Diagnostics.ProcessStartInfo { FileName = php, UseShellExecute = false };
+        psi.ArgumentList.Add(wp);
+        foreach (var a in args) psi.ArgumentList.Add(a);
+        var p = System.Diagnostics.Process.Start(psi)!;
+        p.WaitForExit();
+    }
+
     public void Pg(string sub, params string[] args)
     {
         NeedInit();
@@ -1178,6 +1496,89 @@ $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
             any = true;
         }
         if (!any) Info("none — banglahost nodesite add <name> --fe-dir … --fe-cmd … --fe-port …");
+    }
+
+    // ── Next.js / React 1-Click Installers ──────────────────────────────────────
+    private void EnsureNode()
+    {
+        if (Tools.FnmExe() is null) Node("install", "latest");
+        else if (Tools.NodeBinDir() is null) Node("install", "latest");
+    }
+
+    private void RunNodeCmd(string cmdLine, string dir)
+    {
+        var nodeBin = Tools.NodeBinDir() ?? throw new BhException("Node is not installed");
+        var psi = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "cmd.exe", Arguments = $"/c {cmdLine}",
+            WorkingDirectory = dir, UseShellExecute = false, CreateNoWindow = true,
+            RedirectStandardOutput = true, RedirectStandardError = true,
+        };
+        psi.Environment["PATH"] = nodeBin + ";" + (Environment.GetEnvironmentVariable("PATH") ?? "");
+        var p = System.Diagnostics.Process.Start(psi)!;
+        var o = p.StandardOutput.ReadToEnd();
+        var e = p.StandardError.ReadToEnd();
+        p.WaitForExit();
+        if (p.ExitCode != 0) throw new BhException($"Command failed: {cmdLine}\n{o}\n{e}");
+    }
+
+    private int FindFreeNodePort(int start)
+    {
+        var used = NodeSite.List().Select(n => NodeSite.Load(n))
+                   .Where(c => c != null)
+                   .SelectMany(c => new[] { c!.Frontend.Port, c.Backend?.Port ?? 0 })
+                   .ToHashSet();
+        for (int i = start; i < 65535; i++)
+            if (!used.Contains(i) && !PortInUse(i)) return i;
+        return start;
+    }
+
+    public void NextJsSiteAdd(string name, string? customRoot = null)
+    {
+        NeedInit();
+        EnsureNode();
+        var cfg = Config.Load();
+        var root = customRoot ?? Path.Combine(cfg.SitesRoot, name);
+        if (Directory.Exists(root) && Directory.EnumerateFileSystemEntries(root).Any())
+            throw new BhException($"Directory not empty: {root}");
+        Directory.CreateDirectory(root);
+
+        Hdr("Creating Next.js app (this may take a minute)");
+        RunNodeCmd("npx -y create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias \"@/*\" --use-npm", root);
+        
+        NodeSiteAdd(name, root, "npm run dev", FindFreeNodePort(3000), null, null, 0, "/api");
+    }
+
+    public void ReactSiteAdd(string name, string? customRoot = null)
+    {
+        NeedInit();
+        EnsureNode();
+        var cfg = Config.Load();
+        var root = customRoot ?? Path.Combine(cfg.SitesRoot, name);
+        if (Directory.Exists(root) && Directory.EnumerateFileSystemEntries(root).Any())
+            throw new BhException($"Directory not empty: {root}");
+        Directory.CreateDirectory(root);
+
+        Hdr("Creating React app via Vite (this may take a minute)");
+        RunNodeCmd("npx -y create-vite@latest . --template react && npm install", root);
+        
+        NodeSiteAdd(name, root, "npm run dev", FindFreeNodePort(5173), null, null, 0, "/api");
+    }
+
+    public void VueSiteAdd(string name, string? customRoot = null)
+    {
+        NeedInit();
+        EnsureNode();
+        var cfg = Config.Load();
+        var root = customRoot ?? Path.Combine(cfg.SitesRoot, name);
+        if (Directory.Exists(root) && Directory.EnumerateFileSystemEntries(root).Any())
+            throw new BhException($"Directory not empty: {root}");
+        Directory.CreateDirectory(root);
+
+        Hdr("Creating Vue app via Vite (this may take a minute)");
+        RunNodeCmd("npx -y create-vite@latest . --template vue && npm install", root);
+        
+        NodeSiteAdd(name, root, "npm run dev", FindFreeNodePort(5173), null, null, 0, "/api");
     }
 
     // ── Python-app sites (one supervised process behind an nginx reverse proxy) ──
@@ -1376,6 +1777,23 @@ $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
         SiteAdd("adminer", root: root, type: "others");
     }
 
+    /// <summary>Download phpLiteAdmin and serve it at sqlite.&lt;tld&gt;.</summary>
+    public void PhpLiteAdmin()
+    {
+        NeedInit();
+        var cfg = Config.Load();
+        var root = Path.Combine(cfg.SitesRoot, "phpliteadmin");
+        Directory.CreateDirectory(root);
+        var index = Path.Combine(root, "phpliteadmin.php");
+        if (!File.Exists(index))
+        {
+            Hdr("Downloading phpLiteAdmin");
+            Downloader.InstallPhpLiteAdmin(index).GetAwaiter().GetResult();
+            Ok($"phpLiteAdmin: {index}");
+        }
+        SiteAdd("sqlite", root: root, type: "others");
+    }
+
     /// <summary>Install + run Mailpit and front its web UI at mailpit.&lt;tld&gt;.</summary>
     public void Mailpit()
     {
@@ -1404,7 +1822,7 @@ $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
     }
 
     /// <summary>The built-in web tools — served like sites but listed separately (not user sites).</summary>
-    public static readonly string[] ToolNames = { "phpmyadmin", "adminer", "mailpit" };
+    public static readonly string[] ToolNames = { "phpmyadmin", "adminer", "sqlite", "mailpit" };
     public static bool IsTool(string name) => ToolNames.Contains(name, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Enable (install + serve over HTTPS) or disable a built-in web tool.</summary>
@@ -1421,6 +1839,7 @@ $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
             {
                 case "phpmyadmin": PhpMyAdmin(); break;
                 case "adminer":    Adminer();    break;
+                case "sqlite":     PhpLiteAdmin(); break;
                 case "mailpit":    Mailpit();    break;
             }
             // Tools default to HTTPS (mkcert). If that can't be set up, the http vhost still works.

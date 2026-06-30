@@ -47,21 +47,26 @@ public sealed partial class SitesPage : Page
     private string SelectedServer => (ServerBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "nginx";
     private string SelectedType => ((TypeBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "") switch
     {
-        "WordPress"  => "wordpress",
-        "PHP"        => "php",
-        "Node app"   => "node",
-        "Python app" => "python",
-        _            => "others",
+        "WordPress"      => "wordpress",
+        "Laravel"        => "laravel",
+        "Next.js"        => "nextjs",
+        "React"          => "react",
+        "Vue"            => "vue",
+        "Custom PHP App" => "php",
+        "Node app"       => "node",
+        "Python app"     => "python",
+        _                => "others",
     };
 
     // PHP version + web server + HTTPS toggle don't apply to a reverse-proxied app (Node/Python) —
     // grey them out when one is selected (those types have their own add flow).
     private void Type_Changed(object s, SelectionChangedEventArgs e)
     {
-        var isProc = SelectedType is "node" or "python";
-        if (PhpBox != null)    PhpBox.IsEnabled = !isProc;
-        if (ServerBox != null) ServerBox.IsEnabled = !isProc;
-        if (SslBox != null)    SslBox.IsEnabled = !isProc;
+        var type = SelectedType;
+        var isNodeOrPy = type is "node" or "python" or "react" or "vue" or "nextjs";
+        if (PhpBox != null)    PhpBox.IsEnabled = !isNodeOrPy;
+        if (ServerBox != null) ServerBox.IsEnabled = !isNodeOrPy;
+        if (SslBox != null)    SslBox.IsEnabled = !isNodeOrPy;
     }
 
     private async void Add_Click(object s, RoutedEventArgs e)
@@ -81,8 +86,29 @@ public sealed partial class SitesPage : Page
         string? root = _customRoot;
         var wantSsl = SslBox.IsChecked == true;
         Busy.IsActive = true; AddBtn.IsEnabled = false;
-        var (ok, output) = await EngineHost.Instance.RunCaptured(
-            () => EngineHost.Instance.Engine.SiteAdd(name, php: php, root: root, server: server, type: type));
+        
+        bool ok = false; string output = "";
+        if (type == "nextjs")
+        {
+             (ok, output) = await EngineHost.Instance.RunCaptured(
+                 () => EngineHost.Instance.Engine.NextJsSiteAdd(name, root));
+        }
+        else if (type == "react")
+        {
+             (ok, output) = await EngineHost.Instance.RunCaptured(
+                 () => EngineHost.Instance.Engine.ReactSiteAdd(name, root));
+        }
+        else if (type == "vue")
+        {
+             (ok, output) = await EngineHost.Instance.RunCaptured(
+                 () => EngineHost.Instance.Engine.VueSiteAdd(name, root));
+        }
+        else
+        {
+             (ok, output) = await EngineHost.Instance.RunCaptured(
+                 () => EngineHost.Instance.Engine.SiteAdd(name, php: php, root: root, server: server, type: type));
+        }
+
         // Provision the cert in the same flow when HTTPS is ticked — best-effort: a cert failure (e.g.
         // mkcert missing) is shown as a warning but the site itself stays added (ok reflects SiteAdd).
         if (ok && wantSsl)

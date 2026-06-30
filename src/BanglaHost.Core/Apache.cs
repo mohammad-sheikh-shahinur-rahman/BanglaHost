@@ -159,10 +159,36 @@ public static class Apache
         try
         {
             if (File.Exists(PidFile) && int.TryParse(File.ReadAllText(PidFile).Trim(), out var pid))
-                Process.GetProcessById(pid).Kill(true);
+            {
+                var p = Process.GetProcessById(pid);
+                p.Kill(true);
+                p.WaitForExit(1000);
+            }
         }
         catch { }
         try { File.Delete(PidFile); } catch { }
+
+        // Windows Apache (mpm_winnt) spawns a child process that breaks away from the parent's job.
+        // Kill(true) on the parent leaves the child alive, which gracefully exits but holds the file lock
+        // for several seconds ("Parent process exited abruptly. Child process is ending").
+        // Terminate any runaway child from our bin dir so updates/uninstalls don't hit Access Denied.
+        try
+        {
+            var exe = Tools.HttpdExe();
+            if (exe != null)
+            {
+                foreach (var proc in Process.GetProcessesByName("httpd"))
+                {
+                    try
+                    {
+                        if (proc.MainModule?.FileName.Equals(exe, StringComparison.OrdinalIgnoreCase) == true)
+                            proc.Kill();
+                    }
+                    catch { /* skip e.g. elevated XAMPP processes we can't inspect */ }
+                }
+            }
+        }
+        catch { }
     }
 
     public static void Reload()

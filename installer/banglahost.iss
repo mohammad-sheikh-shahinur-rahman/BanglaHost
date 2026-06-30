@@ -4,7 +4,7 @@
 ; click "More info -> Run anyway" on SmartScreen (the Windows analog of macOS "Open Anyway").
 
 #define MyAppName "BanglaHost"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "BanglaHost | Mohammad Sheikh Shahinur Rahman"
 #define MyAppExe "BanglaHost.App.exe"
 
@@ -31,7 +31,7 @@ SetupIconFile=..\src\BanglaHost.App\Assets\AppIcon.ico
 WizardImageFile=wizard-large.bmp
 WizardSmallImageFile=wizard-small.bmp
 ; Show the MIT license page (user must accept) — file lives at the repo root.
-LicenseFile=..\..\LICENSE
+; LicenseFile=..\..\LICENSE
 UninstallDisplayIcon={app}\{#MyAppExe}
 ; The tray GUI hides-to-tray when asked to close, which fools Windows' Restart Manager (it sees the
 ; window vanish, assumes the app closed, but the process is still alive and holding BanglaHost.App.exe /

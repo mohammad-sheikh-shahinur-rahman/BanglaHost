@@ -22,6 +22,10 @@
                 <ComboBox x:Name="PhpBox" Width="100" SelectedIndex="0"/>
                 <ComboBox x:Name="TypeBox" Width="150" SelectedIndex="0" SelectionChanged="Type_Changed">
                     <ComboBoxItem Content="WordPress"/>
+                    <ComboBoxItem Content="Laravel"/>
+                    <ComboBoxItem Content="Next.js"/>
+                    <ComboBoxItem Content="React"/>
+                    <ComboBoxItem Content="Vue"/>
                     <ComboBoxItem Content="PHP"/>
                     <ComboBoxItem Content="Others (static)"/>
                     <ComboBoxItem Content="Node app"/>

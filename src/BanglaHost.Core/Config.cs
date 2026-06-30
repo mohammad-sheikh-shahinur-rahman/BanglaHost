@@ -23,9 +23,13 @@ public sealed class Config
     [JsonPropertyName("sites_page_size")]     public int SitesPageSize { get; set; } = 15;
     [JsonPropertyName("databases_page_size")] public int DatabasesPageSize { get; set; } = 15;
     [JsonPropertyName("apps_page_size")]      public int AppsPageSize { get; set; } = 15;
+    [JsonPropertyName("lan_sharing")]         public bool LanSharing { get; set; } = false;
+    [JsonPropertyName("quic_enabled")]        public bool QuicEnabled { get; set; } = false;
+    [JsonPropertyName("port_forwarding")]     public string PortForwarding { get; set; } = "";
     [JsonPropertyName("auto_update")]              public bool AutoUpdate { get; set; } = true;
     [JsonPropertyName("start_services_on_launch")] public bool StartServicesOnLaunch { get; set; } = false;
     [JsonPropertyName("root_password")]            public string RootPassword { get; set; } = "";   // "" = passwordless root
+    [JsonPropertyName("ui_language")]              public string UiLanguage { get; set; } = "en";    // "en" | "bn" (Bengali)
 
     private static readonly JsonSerializerOptions Opts = new()
     {

@@ -362,4 +362,85 @@ public sealed partial class SiteListControl : UserControl
         var doPurge = purge.IsChecked == true;
         await Op(() => EngineHost.Instance.Engine.SiteRemove(name, doPurge, doPurge));
     }
+
+    private async void EnvEditor_Click(object s, RoutedEventArgs e)
+    {
+        var name = Tag(s);
+        var siteData = EngineHost.Instance.Snapshot().Result.Sites.FirstOrDefault(x => x.Name == name);
+        if (siteData == null) return;
+        var envPath = System.IO.Path.Combine(siteData.Root, ".env");
+        var content = System.IO.File.Exists(envPath) ? System.IO.File.ReadAllText(envPath) : "";
+        
+        var tb = new TextBox { 
+            Text = content, 
+            AcceptsReturn = true, 
+            Height = 300, 
+            FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"),
+            TextWrapping = TextWrapping.NoWrap
+        };
+        var scroll = new ScrollViewer { Content = tb };
+
+        var dlg = new ContentDialog
+        {
+            Title = $"Edit .env for {name}",
+            Content = scroll,
+            PrimaryButtonText = "Save",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = this.XamlRoot
+        };
+        if (await dlg.ShowAsync() == ContentDialogResult.Primary)
+        {
+            try
+            {
+                System.IO.File.WriteAllText(envPath, tb.Text);
+                await Info("Saved", $"Successfully updated .env for {name}");
+            }
+            catch (Exception ex)
+            {
+                await Info("Error", $"Could not save .env: {ex.Message}");
+            }
+        }
+    }
+
+    private async void InstallWordpress_Click(object s, RoutedEventArgs e)
+    {
+        var name = Tag(s);
+        await Op(() => EngineHost.Instance.Engine.SiteInstallApp(name, "wordpress"));
+    }
+
+    private async void InstallLaravel_Click(object s, RoutedEventArgs e)
+    {
+        var name = Tag(s);
+        await Op(() => EngineHost.Instance.Engine.SiteInstallApp(name, "laravel"));
+    }
+
+    private async void Backup_Click(object s, RoutedEventArgs e)
+    {
+        var name = Tag(s);
+        var file = await Picker.FileSaveZipAsync($"{name}_backup.zip");
+        if (string.IsNullOrEmpty(file)) return;
+        await Op(() => EngineHost.Instance.Engine.SiteBackup(name, file));
+    }
+
+    private async void Restore_Click(object s, RoutedEventArgs e)
+    {
+        var name = Tag(s);
+        var file = await Picker.FileOpenZipAsync();
+        if (string.IsNullOrEmpty(file)) return;
+        
+        var dlg = new ContentDialog
+        {
+            Title = "Restore Site",
+            Content = $"This will overwrite the current files and database for '{name}' with the backup contents. Continue?",
+            PrimaryButtonText = "Restore",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = this.XamlRoot
+        };
+        if (await dlg.ShowAsync() == ContentDialogResult.Primary)
+        {
+            await Op(() => EngineHost.Instance.Engine.SiteRestore(name, file));
+        }
+    }
 }

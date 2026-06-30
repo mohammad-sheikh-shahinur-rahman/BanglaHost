@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="BanglaHost.App.Views.NetworkingPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:BanglaHost.App.Views"
+    Loaded="Page_Loaded">
+    <StackPanel Padding="24" Spacing="16">
+        <StackPanel Spacing="2">
+            <TextBlock Text="Networking &amp; Tunnels" FontSize="26" FontWeight="SemiBold"/>
+            <TextBlock Opacity="0.7" Text="Expose your local sites to the internet via Cloudflare Tunnels."/>
+        </StackPanel>
+
+        <Border BorderThickness="1" CornerRadius="8" Padding="16"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <StackPanel Spacing="16">
+                <TextBlock Text="Start a new tunnel (Cloudflare, Ngrok, Localtunnel)" FontWeight="SemiBold"/>
+                <StackPanel Orientation="Horizontal" Spacing="12">
+                    <ComboBox x:Name="SiteBox" Header="Select a site" Width="250" PlaceholderText="Select site..."/>
+                    <ComboBox x:Name="TunnelProviderBox" Header="Provider" Width="150" SelectedIndex="0">
+                        <ComboBoxItem Content="Cloudflare"/>
+                        <ComboBoxItem Content="Ngrok"/>
+                        <ComboBoxItem Content="Localtunnel"/>
+                    </ComboBox>
+                    <Button Content="Start Tunnel" Click="StartTunnel_Click" Style="{StaticResource AccentButtonStyle}" VerticalAlignment="Bottom"/>
+                    <ProgressRing x:Name="StartBusy" IsActive="False" Width="20" Height="20" VerticalAlignment="Bottom" Margin="0,0,0,6"/>
+                </StackPanel>
+                <TextBlock x:Name="StartStatus" Opacity="0.8" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
+
+        <Border BorderThickness="1" CornerRadius="8" Padding="16"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <StackPanel Spacing="16">
+                <TextBlock Text="Local Network &amp; Custom Routing" FontWeight="SemiBold"/>
+                
+                <Grid ColumnSpacing="16" RowSpacing="16">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Row="0" Grid.Column="0" Spacing="8">
+                        <ToggleSwitch x:Name="LanToggle" Header="LAN Sharing Mode" OnContent="Enabled" OffContent="Disabled"/>
+                        <TextBlock Text="Allow devices on your local network to access your sites." Opacity="0.7" FontSize="12" TextWrapping="Wrap"/>
+                    </StackPanel>
+                    
+                    <StackPanel Grid.Row="0" Grid.Column="1" Spacing="8">
+                        <ToggleSwitch x:Name="QuicToggle" Header="HTTP/2 &amp; HTTP/3 (QUIC)" OnContent="Enabled" OffContent="Disabled"/>
+                        <TextBlock Text="Enable modern protocols in Nginx." Opacity="0.7" FontSize="12" TextWrapping="Wrap"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="1" Grid.Column="0" Spacing="8">
+                        <TextBox x:Name="TldBox" Header="Custom TLD" PlaceholderText=".test" Text=".test"/>
+                        <TextBlock Text="Change the default top-level domain for local sites." Opacity="0.7" FontSize="12" TextWrapping="Wrap"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="1" Grid.Column="1" Spacing="8">
+                        <TextBox x:Name="PortBox" Header="Port Forwarding" PlaceholderText="e.g. 8080:80"/>
+                        <TextBlock Text="Map custom ports to the default web server port." Opacity="0.7" FontSize="12" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Grid>
+                <Button Content="Apply Routing Changes" Click="ApplyRouting_Click"/>
+            </StackPanel>
+        </Border>
+
+        <TextBlock Text="Active Tunnels" FontSize="16" FontWeight="SemiBold" Margin="0,16,0,0"/>
+        <Border BorderThickness="1" CornerRadius="8" Padding="4"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <StackPanel>
+                <TextBlock x:Name="EmptyTunnels" Text="No active tunnels." Opacity="0.6" Padding="10" Visibility="Collapsed"/>
+                <ListView x:Name="TunnelsList" SelectionMode="None">
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="local:TunnelRow">
+                            <Grid Padding="8,6" ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="150"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{x:Bind Name}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" Text="{x:Bind Url}" Opacity="0.8" VerticalAlignment="Center" IsTextSelectionEnabled="True"/>
+                                
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
+                                    <Button Content="Open" Tag="{x:Bind Url}" Click="OpenTunnel_Click" IsEnabled="{x:Bind HasUrl}"/>
+                                    <Button Content="Stop" Tag="{x:Bind Name}" Click="StopTunnel_Click"/>
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </StackPanel>
+        </Border>
+        
+        <Button Content="Refresh" Click="Refresh_Click"/>
+    </StackPanel>
+</Page>

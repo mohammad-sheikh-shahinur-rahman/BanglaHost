@@ -138,5 +138,60 @@ public static class Database
         if (code != 0) throw new BhException("set password failed:\n" + outp);
     }
 
+    public static void Dump(string name, string outputFile)
+    {
+        ValidName(name);
+        if (!DbServer.Running()) throw new BhException("database server not running — banglahost start mariadb");
+        var engine = DbServer.ActiveEngine();
+        var dumper = (engine is not null ? Tools.MysqldumpFor(engine) : Tools.MysqldumpExe())
+                  ?? throw new BhException("mysqldump not found");
+        var bin = Path.GetDirectoryName(dumper)!;
+        var pdir = Path.GetFullPath(Path.Combine(bin, "..", "lib", "plugin"));
+        var pdArg = Directory.Exists(pdir) ? $"--plugin-dir=\"{pdir}\" " : "";
+        var psi = new ProcessStartInfo
+        {
+            FileName = dumper, Arguments = $"{BaseArgs} {pdArg}--result-file=\"{outputFile}\" {name}",
+            UseShellExecute = false, CreateNoWindow = true,
+            RedirectStandardOutput = true, RedirectStandardError = true,
+            WorkingDirectory = bin,
+        };
+        var p = Process.Start(psi)!;
+        var err = p.StandardError.ReadToEnd();
+        p.WaitForExit();
+        err = string.Join('\n', err.Split('\n').Where(l => !l.Contains("ssl-verify-server-cert")));
+        if (p.ExitCode != 0) throw new BhException("dump failed:\n" + err);
+    }
+
+    public static void Import(string name, string sqlFile)
+    {
+        ValidName(name);
+        if (!DbServer.Running()) throw new BhException("database server not running — banglahost start mariadb");
+        
+        var engine = DbServer.ActiveEngine();
+        var cli = (engine is not null ? Tools.MysqlClientFor(engine) : Tools.MysqlClientExe())
+                  ?? throw new BhException("mysql client not found");
+        var bin = Path.GetDirectoryName(cli)!;
+        var pdir = Path.GetFullPath(Path.Combine(bin, "..", "lib", "plugin"));
+        var pdArg = Directory.Exists(pdir) ? $"--plugin-dir=\"{pdir}\" " : "";
+        
+        var psi = new ProcessStartInfo
+        {
+            FileName = cli, Arguments = $"{BaseArgs} {pdArg}{name}",
+            UseShellExecute = false, CreateNoWindow = true,
+            RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
+            WorkingDirectory = bin,
+        };
+        var p = Process.Start(psi)!;
+        using (var fs = File.OpenRead(sqlFile))
+        {
+            fs.CopyTo(p.StandardInput.BaseStream);
+        }
+        p.StandardInput.Close();
+        var err = p.StandardError.ReadToEnd();
+        p.WaitForExit();
+        err = string.Join('\n', err.Split('\n').Where(l => !l.Contains("ssl-verify-server-cert")));
+        if (p.ExitCode != 0) throw new BhException("import failed:\n" + err);
+    }
+
     private static string Esc(string s) => s.Replace("\\", "\\\\").Replace("'", "\\'").Replace("\"", "\\\"");
 }

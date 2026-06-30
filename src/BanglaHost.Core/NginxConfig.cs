@@ -14,6 +14,20 @@ public static class NginxConfig
     /// <summary>nginx wants forward slashes even on Windows.</summary>
     public static string Fwd(string p) => p.Replace('\\', '/');
 
+    /// <summary>Bind address for listen directives: all interfaces when LAN sharing is on
+    /// (so other devices on the network can reach the site), else loopback only.</summary>
+    private static string Bind(Config cfg) => cfg.LanSharing ? "0.0.0.0" : "127.0.0.1";
+
+    /// <summary>Parse the "port forwarding" setting (e.g. "8080" or "8080:80") into the external
+    /// port to add an extra HTTP listen on. Returns 0 when unset/invalid/equal to the HTTP port.</summary>
+    private static int ExtraListenPort(Config cfg)
+    {
+        var s = (cfg.PortForwarding ?? "").Trim();
+        if (s.Length == 0) return 0;
+        var ext = s.Split(':')[0].Trim();
+        return int.TryParse(ext, out var p) && p is > 0 and < 65536 && p != cfg.HttpPort ? p : 0;
+    }
+
     private static string Prefix => Tools.NginxPrefix() ?? Path.Combine(Paths.Bin, "nginx");
     // STABLE conf dir (Home\nginx\conf) — fastcgi_params + mime.types are copied here from the
     // versioned nginx build so site configs that include them DON'T break when nginx is updated.
@@ -105,7 +119,7 @@ public static class NginxConfig
 
             # Catch-all default so an unknown host doesn't leak the first site.
             server {
-                listen 127.0.0.1:{{cfg.HttpPort}} default_server;
+                listen {{Bind(cfg)}}:{{cfg.HttpPort}} default_server;
                 server_name _;
                 return 444;
             }
@@ -123,11 +137,16 @@ public static class NginxConfig
     {
         var cert = Path.Combine(Paths.Certs, $"{domain}.pem");
         var key  = Path.Combine(Paths.Certs, $"{domain}-key.pem");
+        var bind = Bind(cfg);
         var sb = new StringBuilder();
-        sb.AppendLine($"    listen 127.0.0.1:{cfg.HttpPort};");
+        sb.AppendLine($"    listen {bind}:{cfg.HttpPort};");
+        var extra = ExtraListenPort(cfg);
+        if (extra != 0) sb.AppendLine($"    listen {bind}:{extra};   # port forwarding");
         if (File.Exists(cert) && File.Exists(key))
         {
-            sb.AppendLine($"    listen 127.0.0.1:{cfg.HttpsPort} ssl;");
+            // QUIC/HTTP-3 isn't available in the bundled Windows nginx, so "QUIC enabled" applies
+            // HTTP/2 over TLS (the listen-parameter form works across nginx versions).
+            sb.AppendLine($"    listen {bind}:{cfg.HttpsPort} ssl{(cfg.QuicEnabled ? " http2" : "")};");
             sb.AppendLine($"    ssl_certificate {Fwd(cert)};");
             sb.AppendLine($"    ssl_certificate_key {Fwd(key)};");
         }

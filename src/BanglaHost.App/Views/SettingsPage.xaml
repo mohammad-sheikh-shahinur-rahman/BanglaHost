@@ -53,6 +53,7 @@
                     <ToggleSwitch x:Name="TrayToggle" Header="Keep running in the system tray when the window is closed"
                                   OffContent="Off — closing the window quits BanglaHost" OnContent="On — sites stay up in the background" Toggled="Tray_Toggled"/>
                     <ToggleSwitch x:Name="AutoUpdateToggle" Header="Automatically check for updates" OffContent="Off" OnContent="On" Toggled="Flag_Toggled"/>
+                    <ToggleSwitch x:Name="BanglaLanguageToggle" Header="Bengali UI Language (বাংলা ভাষা)" OffContent="English" OnContent="বাংলা" Toggled="Language_Toggled"/>
                     <StackPanel Orientation="Horizontal" Spacing="16">
                         <NumberBox x:Name="DashSizeBox" Header="Dashboard list — sites per page" Width="220"
                                    Minimum="1" Maximum="500" SpinButtonPlacementMode="Inline" ValueChanged="ListSize_Changed"/>

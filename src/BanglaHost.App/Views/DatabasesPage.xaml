@@ -28,6 +28,13 @@
                     <TextBlock x:Name="PgStatus" VerticalAlignment="Center" Opacity="0.7" FontSize="12"/>
                     <ProgressRing x:Name="Busy" IsActive="False" Width="20" Height="20" VerticalAlignment="Center"/>
                 </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock Text="MongoDB" Width="120" VerticalAlignment="Center" Opacity="0.7"/>
+                    <Button x:Name="StartMongoBtn" Content="Start" Click="StartMongo_Click"/>
+                    <Button x:Name="StopMongoBtn"  Content="Stop"  Click="StopMongo_Click"/>
+                    <Button x:Name="InstallMongoBtn" Content="Install MongoDB" Click="InstallMongo_Click"/>
+                    <TextBlock x:Name="MongoStatus" VerticalAlignment="Center" Opacity="0.7" FontSize="12"/>
+                </StackPanel>
             </StackPanel>
         </Border>
 
@@ -95,6 +102,7 @@
             <TextBlock Text="DB tools:" VerticalAlignment="Center" Opacity="0.7"/>
             <Button Content="phpMyAdmin" Click="Pma_Click"/>
             <Button Content="Adminer"    Click="Adminer_Click"/>
+            <Button Content="phpLiteAdmin" Click="PhpLiteAdmin_Click"/>
             <Button Content="Mailpit"    Click="Mailpit_Click"/>
         </StackPanel>
     </StackPanel>

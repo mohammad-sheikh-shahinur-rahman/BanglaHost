@@ -43,6 +43,7 @@ public sealed partial class SettingsPage : Page
         StartSvcToggle.IsOn   = cfg.StartServicesOnLaunch;
         TrayToggle.IsOn       = cfg.MinimizeToTray;
         AutoUpdateToggle.IsOn = cfg.AutoUpdate;
+        BanglaLanguageToggle.IsOn = cfg.UiLanguage == "bn";
         DashSizeBox.Value     = cfg.DashboardPageSize;
         SitesSizeBox.Value    = cfg.SitesPageSize;
         Version.Text = $"Version {Updater.CurrentVersion} · for Windows";
@@ -108,6 +109,18 @@ public sealed partial class SettingsPage : Page
         cfg.StartServicesOnLaunch = StartSvcToggle.IsOn;
         cfg.AutoUpdate = AutoUpdateToggle.IsOn;
         cfg.Save();
+    }
+
+    // Persist the UI-language preference. NOTE: the app does not yet ship Bengali
+    // string resources, so flipping this changes Windows' language override (date/number
+    // formatting and built-in control text) but does NOT translate BanglaHost's own labels —
+    // that needs a proper .resw localization pass.
+    private void Language_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        var lang = BanglaLanguageToggle.IsOn ? "bn" : "en";
+        var cfg = Config.Load(); cfg.UiLanguage = lang; cfg.Save();
+        try { Windows.Globalization.ApplicationLanguages.PrimaryLanguageOverride = lang; } catch { }
     }
 
     private void ListSize_Changed(NumberBox sender, NumberBoxValueChangedEventArgs e)

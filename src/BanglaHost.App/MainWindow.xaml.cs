@@ -233,13 +233,16 @@ public sealed partial class MainWindow : Window
         if (args.SelectedItemContainer is NavigationViewItem { Tag: string tag })
             ContentFrame.Navigate(tag switch
             {
-                "sites"     => typeof(SitesPage),
-                "databases" => typeof(DatabasesPage),
-                "node"      => typeof(NodePage),
-                "python"    => typeof(PythonPage),
-                "services"  => typeof(ServicesPage),
-                "logs"      => typeof(LogsPage),
-                _           => typeof(DashboardPage),
+                "sites"      => typeof(SitesPage),
+                "databases"  => typeof(DatabasesPage),
+                "php"        => typeof(PhpPage),
+                "node"       => typeof(NodePage),
+                "python"     => typeof(PythonPage),
+                "runtimes"   => typeof(RuntimesPage),
+                "networking" => typeof(NetworkingPage),
+                "services"   => typeof(ServicesPage),
+                "logs"       => typeof(LogsPage),
+                _            => typeof(DashboardPage),
             });
     }
 }

@@ -96,7 +96,9 @@ public sealed partial class DatabasesPage : Page
             myDbs:     DbServer.Running() ? Database.List().ToList() : new List<string>(),
             pgInstalled: Tools.PostgresExe() is not null,
             pgRunning: PgServer.Running(),
-            pgDbs:     PgServer.Running() ? PgDatabase.List().ToList() : new List<string>()));
+            pgDbs:     PgServer.Running() ? PgDatabase.List().ToList() : new List<string>(),
+            mongoInstalled: Tools.MongoExe() is not null,
+            mongoRunning: MongoServer.Running()));
 
         var sqlInstalled = snap.mariadbInstalled || snap.mysqlInstalled;
         var sqlEngineName = snap.myEngine == "mariadb" ? "MariaDB" : "MySQL";
@@ -121,6 +123,11 @@ public sealed partial class DatabasesPage : Page
         InstallPgBtn.Visibility = snap.pgInstalled ? Visibility.Collapsed : Visibility.Visible;
         StartPgBtn.IsEnabled = snap.pgInstalled && !snap.pgRunning;
         StopPgBtn.IsEnabled = snap.pgRunning;
+
+        MongoStatus.Text = !snap.mongoInstalled ? "not installed" : snap.mongoRunning ? "running" : "stopped";
+        InstallMongoBtn.Visibility = snap.mongoInstalled ? Visibility.Collapsed : Visibility.Visible;
+        StartMongoBtn.IsEnabled = snap.mongoInstalled && !snap.mongoRunning;
+        StopMongoBtn.IsEnabled = snap.mongoRunning;
 
         // Create: only an engine that's actually RUNNING can accept a new database.
         var engines = new List<string>();
@@ -154,6 +161,10 @@ public sealed partial class DatabasesPage : Page
     private async void StartPg_Click(object s, RoutedEventArgs e) => await Op(() => EngineHost.Instance.Engine.Start("postgresql"));
     private async void StopPg_Click(object s, RoutedEventArgs e)  => await Op(() => EngineHost.Instance.Engine.Stop("postgresql"));
     private async void InstallPg_Click(object s, RoutedEventArgs e) => await Op(() => EngineHost.Instance.Engine.Install("postgresql"));
+
+    private async void StartMongo_Click(object s, RoutedEventArgs e) => await Op(() => EngineHost.Instance.Engine.Start("mongodb"));
+    private async void StopMongo_Click(object s, RoutedEventArgs e)  => await Op(() => EngineHost.Instance.Engine.Stop("mongodb"));
+    private async void InstallMongo_Click(object s, RoutedEventArgs e) => await Op(() => EngineHost.Instance.Engine.Install("mongodb"));
 
     private bool IsPgSelected => (EngineBox.SelectedItem as ComboBoxItem)?.Content?.ToString() == "PostgreSQL";
 
@@ -228,6 +239,7 @@ public sealed partial class DatabasesPage : Page
 
     private async void Pma_Click(object s, RoutedEventArgs e)     => await Tool(() => EngineHost.Instance.Engine.PhpMyAdmin(), "http://phpmyadmin." + Tld());
     private async void Adminer_Click(object s, RoutedEventArgs e) => await Tool(() => EngineHost.Instance.Engine.Adminer(),   "http://adminer." + Tld());
+    private async void PhpLiteAdmin_Click(object s, RoutedEventArgs e) => await Tool(() => EngineHost.Instance.Engine.PhpLiteAdmin(), "http://sqlite." + Tld());
     private async void Mailpit_Click(object s, RoutedEventArgs e) => await Tool(() => EngineHost.Instance.Engine.Mailpit(),   "http://127.0.0.1:8025");
 
     private static string Tld() => Config.Load().Tld;

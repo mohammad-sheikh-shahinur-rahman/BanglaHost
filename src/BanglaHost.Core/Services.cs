@@ -23,12 +23,26 @@ public static class Services
         list.Add(new("mysql",     ServiceRole.Db));
         list.Add(new("mariadb",   ServiceRole.Db));
         list.Add(new("postgresql",ServiceRole.Db));
+        list.Add(new("mongodb",   ServiceRole.Db));
+        list.Add(new("meilisearch",ServiceRole.Other));
         list.Add(new("redis",     ServiceRole.Cache));
         list.Add(new("memcached", ServiceRole.Cache));
         list.Add(new("mkcert",    ServiceRole.Tool));
         list.Add(new("mailpit",   ServiceRole.Mail));
         list.Add(new("fnm",       ServiceRole.Node));
         list.Add(new("python",    ServiceRole.Python));
+        // New Services / Tools added
+        list.Add(new("rabbitmq",  ServiceRole.Other));
+        list.Add(new("beanstalkd", ServiceRole.Other));
+        list.Add(new("elasticsearch", ServiceRole.Other));
+        list.Add(new("typesense", ServiceRole.Other));
+        list.Add(new("minio", ServiceRole.Other));
+        list.Add(new("supervisor", ServiceRole.Tool));
+        list.Add(new("adminer", ServiceRole.Tool));
+        list.Add(new("phpmyadmin", ServiceRole.Tool));
+        list.Add(new("pgadmin", ServiceRole.Tool));
+        list.Add(new("redisinsight", ServiceRole.Tool));
+        list.Add(new("mongoexpress", ServiceRole.Tool));
         return list;
     }
 
@@ -44,12 +58,25 @@ public static class Services
         "mysql"     => Tools.DbVersionFor("mysql")   is { } mv ? $"MySQL {mv}"   : "MySQL",
         "mariadb"   => Tools.DbVersionFor("mariadb") is { } dv ? $"MariaDB {dv}" : "MariaDB",
         "postgresql"=> "PostgreSQL 16",
+        "mongodb"   => "MongoDB",
+        "meilisearch"=>"Meilisearch",
         "redis"     => "Redis",
         "memcached" => "Memcached",
         "mailpit"   => "Mailpit",
         "mkcert"    => "mkcert",
         "fnm"       => "fnm",
         "python"    => Tools.PythonVersion() is { } pv ? $"Python {pv}" : "Python",
+        "rabbitmq"  => "RabbitMQ",
+        "beanstalkd"=> "Beanstalkd",
+        "elasticsearch"=> "Elasticsearch",
+        "typesense" => "Typesense",
+        "minio"     => "MinIO",
+        "supervisor"=> "Supervisor",
+        "adminer"   => "Adminer",
+        "phpmyadmin"=> "phpMyAdmin",
+        "pgadmin"   => "pgAdmin",
+        "redisinsight"=> "RedisInsight",
+        "mongoexpress"=> "Mongo Express",
         _ when RoleOf(key) == ServiceRole.Php => "PHP " + PhpVersion(key, cfg),
         _ => "",
     };
@@ -77,6 +104,8 @@ public static class Services
         "mysql"     => Tools.MysqlInstalled,
         "mariadb"   => Tools.MariadbInstalled,
         "postgresql"=> Tools.PostgresExe() is not null,
+        "mongodb"   => Tools.MongoExe() is not null,
+        "meilisearch"=>Tools.MeiliExe() is not null,
         "redis"     => Tools.RedisServerExe() is not null,
         "memcached" => Tools.MemcachedExe() is not null,
         "mkcert"    => Tools.MkcertExe() is not null,
