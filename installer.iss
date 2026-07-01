@@ -1,6 +1,6 @@
 [Setup]
 AppName=BanglaHost
-AppVersion=1.0.2
+AppVersion=1.3.3
 DefaultDirName={autopf}\BanglaHost
 DefaultGroupName=BanglaHost
 OutputDir=Output
