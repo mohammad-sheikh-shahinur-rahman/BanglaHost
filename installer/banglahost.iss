@@ -4,7 +4,7 @@
 ; click "More info -> Run anyway" on SmartScreen (the Windows analog of macOS "Open Anyway").
 
 #define MyAppName "BanglaHost"
-#define MyAppVersion "1.3.2"
+#define MyAppVersion "1.3.4"
 #define MyAppPublisher "Mohammad Sheikh Shahinur Rahman"
 #define MyAppExe "BanglaHost.App.exe"
 

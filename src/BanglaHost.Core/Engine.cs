@@ -1750,6 +1750,15 @@ $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
                 var conf = Path.Combine(Paths.NginxSites, $"{name}.conf");
                 if (!File.Exists(conf)) throw new BhException($"no site '{name}'");
                 if (!Nginx.Running()) throw new BhException("nginx not running — start it first (banglahost start nginx)");
+                // Apache-backed sites proxy through nginx → Apache :8080.  If Apache isn't
+                // running the tunnel gets 502 Bad Gateway.  Auto-start it so the user never
+                // has to remember a separate "start apache" step before sharing.
+                var confText = File.ReadAllText(conf);
+                if (confText.Contains("server=apache") && !Apache.Running())
+                {
+                    var (aok, amsg) = Apache.Start();
+                    if (aok) Ok(amsg); else throw new BhException($"Apache failed to start (needed for this site): {amsg}");
+                }
                 // First share auto-installs cloudflared — the user never has to run a command.
                 if (Tools.CloudflaredExe() is null)
                 {
@@ -1758,7 +1767,7 @@ $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
                 }
                 var cfg = Config.Load();
                 var domain = $"{name}.{cfg.Tld}";
-                var origin = File.ReadAllText(conf).Contains($"listen 127.0.0.1:{cfg.HttpsPort} ssl")
+                var origin = confText.Contains($"listen 127.0.0.1:{cfg.HttpsPort} ssl")
                     ? $"https://127.0.0.1:{cfg.HttpsPort}" : $"http://127.0.0.1:{cfg.HttpPort}";
                 Hdr($"Cloudflare tunnel → {domain}");
                 var (ok, msg) = BanglaHost.Core.Tunnel.Start(name, domain, origin);

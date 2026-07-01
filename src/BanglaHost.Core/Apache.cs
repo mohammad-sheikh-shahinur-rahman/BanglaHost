@@ -101,6 +101,11 @@ public static class Apache
             </Directory>
             Action application/x-httpd-php "/__bhphp/php-cgi.exe"
             AddType application/x-httpd-php .php
+            # JIT is useless in CGI mode (each request is a fresh process — nothing to cache) and its
+            # "incompatible with third party extensions" warning on stderr makes mod_cgi see a
+            # "malformed header" → 500 Internal Server Error. Disable it + suppress startup noise.
+            SetEnv PHP_VALUE "opcache.jit=disable"
+            SetEnv PHP_ADMIN_VALUE "display_startup_errors=Off"
             ErrorLog "{{home}}/logs/{{name}}-apache-error.log"
         </VirtualHost>
 
@@ -197,5 +202,21 @@ public static class Apache
         Stop();
         System.Threading.Thread.Sleep(300);
         Start();
+    }
+
+    // Start Apache and optionally a Cloudflare tunnel
+    public static (bool ok, string msg) StartWithTunnel(string tunnelName = null)
+    {
+        var (tOk, tMsg) = TunnelService.Start(tunnelName);
+        if (!tOk) return (false, $"Tunnel start failed: {tMsg}");
+        return Start();
+    }
+
+    // Stop Apache and optionally stop the tunnel
+    public static (bool ok, string msg) StopWithTunnel(string tunnelName = null)
+    {
+        Stop();
+        var (tOk, tMsg) = TunnelService.Stop(tunnelName);
+        return (tOk, tMsg);
     }
 }

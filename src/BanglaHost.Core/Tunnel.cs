@@ -55,6 +55,14 @@ public static class Tunnel
         if (cf is null) return (false, "cloudflared not installed — banglahost tunnel install");
         if (Running(name)) return (true, Url(name) is { } u ? $"tunnel already running: {u}" : "tunnel already running");
 
+        // Ensure the front‑end web server is up before we launch the tunnel.
+        // Start Nginx if it isn’t already running (required for all sites).
+        if (!BanglaHost.Core.Nginx.Running())
+        {
+            var (ok, msg) = BanglaHost.Core.Nginx.Start(BanglaHost.Core.Config.Load());
+            if (!ok) return (false, $"failed to start nginx before tunnel: {msg}");
+        }
+
         Directory.CreateDirectory(Paths.Run);
         try { File.Delete(UrlFile(name)); } catch { }
         File.WriteAllText(LogFile(name), "");
@@ -92,6 +100,7 @@ public static class Tunnel
 
     public static void Stop(string name)
     {
+        // Stop the cloudflared process first.
         try
         {
             if (File.Exists(PidFile(name)) && int.TryParse(File.ReadAllText(PidFile(name)).Trim(), out var pid))
@@ -99,6 +108,11 @@ public static class Tunnel
         }
         catch { }
         try { File.Delete(PidFile(name)); File.Delete(UrlFile(name)); } catch { }
+
+        // Then stop the web servers that were started for this tunnel.
+        // Apache may have been auto‑started for Apache‑backed sites.
+        try { if (BanglaHost.Core.Apache.Running()) BanglaHost.Core.Apache.Stop(); } catch { }
+        try { if (BanglaHost.Core.Nginx.Running()) BanglaHost.Core.Nginx.Stop(); } catch { }
     }
 
     public static IEnumerable<(string name, string? url)> List()
