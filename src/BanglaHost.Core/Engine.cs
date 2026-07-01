@@ -93,7 +93,7 @@ public sealed class Engine
     private List<string> RequiredServices(string type, string php, string server)
     {
         var cfg = Config.Load();
-        if (type is "node" or "nextjs" or "react") return new List<string> { "nginx", "fnm" };
+        if (type is "node" or "nextjs" or "react" or "vue") return new List<string> { "nginx", "fnm" };
         if (type == "python") return new List<string> { "nginx", "python" };
         var req = new List<string> { server == "apache" ? "apache" : "nginx" };
         if (type is "php" or "wordpress" or "laravel") req.Add(Services.PhpKey(php, cfg));
@@ -441,8 +441,22 @@ $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
         Ok($"site vhost: {Path.Combine(Paths.NginxSites, name + ".conf")}  (server={server})");
 
         // Serve it first (so the site works immediately), then map the hostname.
-        if (Nginx.Running()) Nginx.Reload(cfg);
-        else { var (ok, msg) = Nginx.Start(cfg); if (ok) Ok(msg); else Warn(msg); }
+        try
+        {
+            if (Nginx.Running()) Nginx.Reload(cfg);
+            else { var (ok, msg) = Nginx.Start(cfg); if (ok) Ok(msg); else Warn(msg); }
+        }
+        catch (BhException ex) when (ex.Message.Contains("Nginx crashed during reload") || ex.Message.Contains("config test failed"))
+        {
+            // Roll back the vhost that broke the reload so the server stays online AND so a bad
+            // .conf can't sit in sites/*.conf and fail every future reload (a poison pill).
+            try { File.Delete(Path.Combine(Paths.NginxSites, name + ".conf")); } catch { }
+            Nginx.Stop();
+            // Wait for dying Nginx processes to fully exit so Start() doesn't skip
+            for (int i = 0; i < 15; i++) { if (!Nginx.Running()) break; System.Threading.Thread.Sleep(200); }
+            Nginx.Start(cfg);
+            throw new BhException($"Site '{name}' could not be added because it broke Nginx (usually Port 80/443 blocked by Skype, VMWare, or IIS — or an invalid config). The site was not saved, to keep your server online.");
+        }
 
         Provision(name, type, root, version);
         EnsureHosts(domain);
@@ -865,7 +879,19 @@ $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
             var cfg = Config.Load();
             var (dom, root, phpKey) = ParseVhost(conf);
             NginxConfig.RenderPhpVhost(name, dom, root, phpKey, cfg);
-            if (Nginx.Running()) Nginx.Reload(cfg);
+            try
+            {
+                if (Nginx.Running()) Nginx.Reload(cfg);
+            }
+            catch (BhException ex) when (ex.Message.Contains("Nginx crashed during reload"))
+            {
+                // Rollback SSL so Nginx can stay online
+                try { File.Delete(Path.Combine(Paths.Certs, $"{dom}.pem")); } catch { }
+                try { File.Delete(Path.Combine(Paths.Certs, $"{dom}-key.pem")); } catch { }
+                NginxConfig.RenderPhpVhost(name, dom, root, phpKey, cfg);
+                Nginx.Start(cfg);
+                throw new BhException($"Could not enable HTTPS for '{name}' because Port 443 is blocked by another program (like VMWare or Skype). HTTPS was turned off so the server can stay online.");
+            }
             Ok("re-rendered vhost with HTTPS");
         }
         Ok($"secured: https://{domain}");
@@ -911,30 +937,44 @@ $e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
     }
 
     // ── elevation-backed helpers ────────────────────────────────────────────────
-    /// <summary>Ensure 127.0.0.1 → domain in the hosts file (direct if admin, else one UAC prompt).</summary>
-    private void EnsureHosts(string domain)
+    /// <summary>Ensure 127.0.0.1 → domain in the hosts file (direct if admin, else one UAC prompt).
+    /// Returns true when the domain resolves via the hosts file afterward.</summary>
+    public bool EnsureHosts(string domain)
     {
-        if (Hosts.Has(domain)) { Ok($"hosts: {domain} (already mapped)"); return; }
+        if (Hosts.IsMapped(domain)) { Ok($"hosts: {domain} → 127.0.0.1 (already mapped)"); return true; }
         // Escape hatch for CI/automation where no one can click the UAC prompt.
         if (Environment.GetEnvironmentVariable("BANGLAHOST_SKIP_HOSTS") is { Length: > 0 })
         {
-            Warn($"hosts skipped (BANGLAHOST_SKIP_HOSTS) — add manually: 127.0.0.1 {domain}");
-            return;
+            Warn($"hosts skipped (BANGLAHOST_SKIP_HOSTS) — add manually: {Hosts.ManualLine(domain)}");
+            return false;
         }
-        if (Hosts.Add(domain)) { Ok($"hosts: {domain} → 127.0.0.1"); return; }
+        if (Hosts.Add(domain)) { Ok($"hosts: {domain} → 127.0.0.1"); return true; }
+
+        if (Elevation.HelperPath() is null)
+        {
+            Warn($"hosts helper missing (banglahost-elevate.exe not next to the app) — add manually:\n{Hosts.ManualLine(domain)}");
+            Log.Warn($"EnsureHosts: banglahost-elevate.exe not found — cannot map {domain}");
+            return false;
+        }
+
         Info("requesting admin to update the hosts file (UAC)…");
         Elevation.Run("hosts-add", domain);
         // Judge success by READING THE HOSTS FILE BACK, not the elevated child's exit code: the exit
         // code of a runas child launched from a non-elevated process is unreliable (it can throw/misreport
         // on some Windows builds → a false "not updated" even when the write succeeded). Re-check briefly
         // in case the helper's handle returned before the write flushed.
-        var added = false;
-        for (var i = 0; i < 6 && !(added = Hosts.Has(domain)); i++) System.Threading.Thread.Sleep(300);
-        if (added)
+        for (var i = 0; i < 10 && !Hosts.IsMapped(domain); i++)
+            System.Threading.Thread.Sleep(300);
+        if (Hosts.IsMapped(domain))
+        {
             Ok($"hosts: {domain} → 127.0.0.1 (elevated)");
-        else
-            Warn($"hosts not updated — add manually: 127.0.0.1 {domain}  " +
-                 "(some antivirus/security tools block edits to the hosts file — allow hosts changes there, or add the line by hand)");
+            return true;
+        }
+
+        Warn($"hosts not updated — add manually as Administrator:\n{Hosts.ManualLine(domain)}\n" +
+             "(allow the UAC prompt, or add the line by hand — some antivirus tools block hosts edits)");
+        Log.Warn($"EnsureHosts: failed to map {domain} after elevation");
+        return false;
     }
 
     /// <summary>Ensure mkcert's local CA exists + is trusted (first run needs admin/UAC).</summary>

@@ -68,8 +68,19 @@ public static class Nginx
 
         // Launch detached. nginx daemonizes on Windows and writes its own pid file.
         Run(exe, $"-p \"{NginxConfig.Fwd(NginxDir)}\" -c \"{NginxConfig.Fwd(ConfPath)}\"", wait: false);
-        System.Threading.Thread.Sleep(400);
-        return Running() ? (true, "nginx started") : (false, "nginx failed to start (see logs/nginx-error.log)");
+        // Poll for up to ~3s instead of a single fixed wait: a cold start (first launch, or AV
+        // scanning nginx.exe) routinely takes longer than 400ms to spawn + write the pid file.
+        // Declaring "failed" too early made reload callers roll back (delete) a perfectly good site.
+        for (var i = 0; i < 30; i++) { if (Running()) return (true, "nginx started"); System.Threading.Thread.Sleep(100); }
+        return (false, "nginx failed to start (see logs/nginx-error.log)");
+    }
+
+    /// <summary>Block until no nginx process remains (or the timeout elapses). Returns true once stopped.</summary>
+    private static bool WaitUntilStopped(int timeoutMs)
+    {
+        for (var waited = 0; waited < timeoutMs && Running(); waited += 100)
+            System.Threading.Thread.Sleep(100);
+        return !Running();
     }
 
     public static void Stop()
@@ -95,12 +106,20 @@ public static class Nginx
         var (ok, msg) = Test(exe);
         if (!ok) throw new BhException("nginx config test failed:\n" + msg);
 
-        Run(exe, $"-s reload -p \"{NginxConfig.Fwd(NginxDir)}\" -c \"{NginxConfig.Fwd(ConfPath)}\"");
-        
-        // On Windows, if a new site binds to a port (like 443) that is already in use by another app, 
-        // `nginx -s reload` can crash the master process, leaving the server offline.
-        System.Threading.Thread.Sleep(500);
-        if (!Running())
+        // On Windows, `nginx -s reload` is buggy and can crash the master process if it fails to bind
+        // to a port (e.g. 443) or just due to socket reuse issues. A hard restart is safer and
+        // guarantees the new config is applied cleanly for local dev servers.
+        //
+        // The old master/workers MUST be fully gone before we Start() again: if a straggler is still
+        // alive, Start() short-circuits on "already running" and we'd silently keep serving the OLD
+        // config (the just-added site never loads) — or end up with nothing running when that straggler
+        // exits a moment later. So confirm a clean stop, and bail loudly if it won't die.
+        Stop();
+        if (!WaitUntilStopped(3000))
+            throw new BhException("Nginx crashed during reload! A worker process is stuck and wouldn't shut down — close anything using it (or reboot) and try again.");
+
+        var (sOk, _) = Start(cfg);
+        if (!sOk)
             throw new BhException("Nginx crashed during reload! This usually happens if port 80 or 443 is being used by another program (like IIS, Skype, or VMWare). Check your ports and try again.");
     }
 }

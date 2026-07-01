@@ -76,6 +76,7 @@
                                                 <MenuFlyoutItem Text="Open in code editor" Tag="{x:Bind Name}" Click="CodeEditor_Click"/>
                                                 <MenuFlyoutItem Text="Open terminal here" Tag="{x:Bind Name}" Click="Terminal_Click"/>
                                                 <MenuFlyoutItem Text="Edit .env file" Tag="{x:Bind Name}" Click="EnvEditor_Click"/>
+                                                <MenuFlyoutItem Text="Fix hosts file (Admin)" Tag="{x:Bind Domain}" Click="FixHosts_Click"/>
                                                 <MenuFlyoutSeparator/>
                                                 <MenuFlyoutSubItem Text="Install App">
                                                     <MenuFlyoutItem Text="WordPress" Tag="{x:Bind Name}" Click="InstallWordpress_Click"/>

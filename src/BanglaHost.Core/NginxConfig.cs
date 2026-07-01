@@ -117,11 +117,17 @@ public static class NginxConfig
                        application/javascript application/xml application/xml+rss
                        application/rss+xml image/svg+xml application/wasm font/ttf font/otf;
 
-            # Catch-all default so an unknown host doesn't leak the first site.
+            # Default server: serve the BanglaHost dashboard at http://localhost (and for any
+            # unmatched host) instead of a dead `return 444` — so visiting localhost first (the way
+            # XAMPP/Laragon users do) shows a real page listing every site, not an empty reply.
+            # Individual sites still match by their own server_name; nothing leaks the "first site".
             server {
                 listen {{Bind(cfg)}}:{{cfg.HttpPort}} default_server;
-                server_name _;
-                return 444;
+                server_name localhost;
+                root {{home}}/dashboard;
+                index index.html;
+                access_log {{home}}/logs/dashboard-access.log;
+                location / { try_files $uri $uri/ =404; }
             }
 
             include {{home}}/nginx/sites/*.conf;
@@ -130,6 +136,105 @@ public static class NginxConfig
         """);
         Directory.CreateDirectory(Path.GetDirectoryName(conf)!);
         File.WriteAllText(conf, sb.ToString());
+        RenderDashboard(cfg);
+    }
+
+    /// <summary>Render the static landing page served at http://localhost — a branded index that
+    /// lists every BanglaHost site with a clickable link, so localhost is a useful home page rather
+    /// than a dead end. Regenerated on every RenderMain (i.e. whenever sites change).</summary>
+    private static void RenderDashboard(Config cfg)
+    {
+        var dir = Path.Combine(Paths.Home, "dashboard");
+        try { Directory.CreateDirectory(dir); } catch { }
+
+        // Collect sites from the rendered vhosts: server_name + scheme (https if it listens ssl).
+        var sites = new List<(string domain, bool https)>();
+        try
+        {
+            if (Directory.Exists(Paths.NginxSites))
+                foreach (var f in Directory.GetFiles(Paths.NginxSites, "*.conf"))
+                {
+                    var txt = File.ReadAllText(f);
+                    var m = System.Text.RegularExpressions.Regex.Match(txt, @"server_name\s+([^;]+);");
+                    if (!m.Success) continue;
+                    var domain = m.Groups[1].Value.Trim().Split(' ')[0];
+                    if (domain.Length == 0 || domain == "_") continue;
+                    var https = System.Text.RegularExpressions.Regex.IsMatch(txt, @"listen[^;]*\sssl");
+                    sites.Add((domain, https));
+                }
+        }
+        catch { /* a malformed vhost must never break dashboard rendering */ }
+        sites.Sort((a, b) => string.CompareOrdinal(a.domain, b.domain));
+
+        string Esc(string s) => System.Net.WebUtility.HtmlEncode(s);
+        var rows = new StringBuilder();
+        if (sites.Count == 0)
+            rows.Append("<p class='empty'>No sites yet — add one from the BanglaHost app, then refresh this page.</p>");
+        else
+        {
+            rows.Append("<ul class='sites'>");
+            foreach (var (domain, https) in sites)
+            {
+                var url = $"{(https ? "https" : "http")}://{domain}";
+                rows.Append($"<li><a href='{Esc(url)}'><span class='dot {(https ? "s" : "")}'></span>{Esc(domain)}<span class='scheme'>{(https ? "https" : "http")}</span></a></li>");
+            }
+            rows.Append("</ul>");
+        }
+
+        var html = $$"""
+        <!doctype html>
+        <html lang='en'>
+        <head>
+        <meta charset='utf-8'>
+        <meta name='viewport' content='width=device-width, initial-scale=1'>
+        <title>BanglaHost</title>
+        <style>
+          :root { color-scheme: light dark; }
+          * { box-sizing: border-box; }
+          body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;
+                 font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif; background:#0f172a; color:#e2e8f0; }
+          .card { width:100%; max-width:640px; background:#111827; border:1px solid #1f2937; border-radius:18px;
+                  overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,.45); }
+          .hero { background:linear-gradient(135deg,#2563eb,#7c3aed); padding:34px 32px; }
+          .badge { display:inline-block; font-size:12px; letter-spacing:.08em; text-transform:uppercase;
+                   background:rgba(255,255,255,.18); padding:4px 11px; border-radius:999px; }
+          h1 { margin:14px 0 4px; font-size:28px; line-height:1.15; }
+          .hero p { margin:0; opacity:.92; }
+          .body { padding:22px 28px 28px; }
+          .sites { list-style:none; margin:0; padding:0; }
+          .sites li { margin:0 0 9px; }
+          .sites a { display:flex; align-items:center; gap:12px; padding:13px 16px; border-radius:12px;
+                     background:#0b1220; border:1px solid #1f2937; text-decoration:none; color:#e2e8f0;
+                     font-family:ui-monospace,'Cascadia Code',Consolas,monospace; font-size:15px; }
+          .sites a:hover { border-color:#3b82f6; background:#0d1628; }
+          .dot { width:9px; height:9px; border-radius:50%; background:#64748b; flex:0 0 auto; }
+          .dot.s { background:#22c55e; }
+          .scheme { margin-left:auto; font-size:12px; color:#94a3b8; }
+          .empty { color:#94a3b8; font-size:14px; }
+          .foot { margin-top:18px; display:flex; justify-content:space-between; align-items:center;
+                  font-size:13px; color:#94a3b8; }
+          .foot strong { color:#cbd5e1; }
+        </style>
+        </head>
+        <body>
+          <div class='card'>
+            <div class='hero'>
+              <span class='badge'>Running</span>
+              <h1>BanglaHost</h1>
+              <p>Your local web server is up. Pick a site below.</p>
+            </div>
+            <div class='body'>
+              {{rows}}
+              <div class='foot'>
+                <span>Powered by <strong>BanglaHost</strong></span>
+                <span>Mohammad Sheikh Shahinur Rahman</span>
+              </div>
+            </div>
+          </div>
+        </body>
+        </html>
+        """;
+        try { File.WriteAllText(Path.Combine(dir, "index.html"), html); } catch { }
     }
 
     /// <summary>Emit the listen/ssl lines for a domain (HTTP always; HTTPS if a cert exists).</summary>

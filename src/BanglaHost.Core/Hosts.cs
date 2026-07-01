@@ -12,6 +12,7 @@ namespace BanglaHost.Core;
 public static class Hosts
 {
     private const string Tag = "# BanglaHost";
+    private static readonly string[] LocalIps = { "127.0.0.1", "::1", "0.0.0.0" };
 
     /// <summary>A strict hostname: lowercase labels of [a-z0-9-] joined by dots, no leading/trailing
     /// hyphen, max 253 chars. Critically rejects whitespace/newlines so the value can never inject
@@ -31,28 +32,41 @@ public static class Hosts
         catch { return false; }
     }
 
-    public static bool Has(string domain)
+    /// <summary>True if the hosts file maps <paramref name="domain"/> to localhost (any tool, tagged or not).</summary>
+    public static bool IsMapped(string domain)
     {
+        if (!IsValidDomain(domain)) return false;
         try
         {
-            return File.Exists(Paths.HostsFile) &&
-                   File.ReadLines(Paths.HostsFile)
-                       .Any(l => l.Contains(Tag) && l.Split('#')[0].Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
-                                                     .Contains(domain));
+            if (!File.Exists(Paths.HostsFile)) return false;
+            foreach (var line in File.ReadLines(Paths.HostsFile))
+            {
+                var active = line.Split('#')[0].Trim();
+                if (active.Length == 0) continue;
+                var parts = active.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length < 2) continue;
+                if (!LocalIps.Contains(parts[0])) continue;
+                for (var i = 1; i < parts.Length; i++)
+                    if (string.Equals(parts[i], domain, StringComparison.OrdinalIgnoreCase))
+                        return true;
+            }
+            return false;
         }
         catch { return false; }
     }
+
+    public static bool Has(string domain) => IsMapped(domain);
 
     /// <summary>Append "127.0.0.1 domain # BanglaHost" if absent. Returns false (no-throw) when not elevated.</summary>
     public static bool Add(string domain)
     {
         if (!IsValidDomain(domain)) return false;   // never write unvalidated input to the hosts file
-        if (Has(domain)) return true;
+        if (IsMapped(domain)) return true;
         if (!IsElevated()) return false;
         try
         {
             File.AppendAllText(Paths.HostsFile, $"127.0.0.1 {domain} {Tag}{Environment.NewLine}");
-            return true;
+            return IsMapped(domain);
         }
         catch { return false; }
     }
@@ -61,15 +75,18 @@ public static class Hosts
     public static bool Remove(string domain)
     {
         if (!IsValidDomain(domain)) return false;
-        if (!Has(domain)) return true;
+        if (!IsMapped(domain)) return true;
         if (!IsElevated()) return false;
         try
         {
             var kept = File.ReadAllLines(Paths.HostsFile)
-                           .Where(l => !(l.Contains(Tag) && l.Contains(domain)));
+                           .Where(l => !(l.Contains(Tag) && l.Contains(domain, StringComparison.OrdinalIgnoreCase)));
             File.WriteAllLines(Paths.HostsFile, kept);
             return true;
         }
         catch { return false; }
     }
+
+    /// <summary>The line users can paste into the hosts file when automatic elevation fails.</summary>
+    public static string ManualLine(string domain) => $"127.0.0.1 {domain} {Tag}";
 }

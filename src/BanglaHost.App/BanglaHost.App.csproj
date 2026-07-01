@@ -23,6 +23,8 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\BanglaHost.Core\BanglaHost.Core.csproj" />
+    <!-- Build-order only — the elevate helper is copied next to the GUI exe so UAC hosts edits work. -->
+    <ProjectReference Include="..\BanglaHost.Elevate\BanglaHost.Elevate.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Assets\AppIcon.ico">
@@ -32,4 +34,14 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
+
+  <!-- banglahost-elevate.exe must sit beside BanglaHost.App.exe or DNS (*.test) never resolves. -->
+  <Target Name="CopyElevateHelper" AfterTargets="Build">
+    <Copy Condition="Exists('$(MSBuildThisFileDirectory)..\BanglaHost.Elevate\bin\$(Platform)\$(Configuration)\net8.0\banglahost-elevate.exe')"
+          SourceFiles="$(MSBuildThisFileDirectory)..\BanglaHost.Elevate\bin\$(Platform)\$(Configuration)\net8.0\banglahost-elevate.exe"
+          DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+    <Copy Condition="Exists('$(MSBuildThisFileDirectory)..\BanglaHost.Elevate\bin\$(Configuration)\net8.0\banglahost-elevate.exe')"
+          SourceFiles="$(MSBuildThisFileDirectory)..\BanglaHost.Elevate\bin\$(Configuration)\net8.0\banglahost-elevate.exe"
+          DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+  </Target>
 </Project>

@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using BanglaHost.App.Services;
+using BanglaHost.App.ViewModels;
 using BanglaHost.Core;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
@@ -202,7 +203,12 @@ public sealed partial class SiteListControl : UserControl
 
     private async void Secure_Click(object s, RoutedEventArgs e)
     {
-        if ((s as FrameworkElement)?.Tag is string domain) await Op(() => EngineHost.Instance.Engine.Secure(domain));
+        if ((s as FrameworkElement)?.Tag is string domain)
+        {
+            await Op(() => EngineHost.Instance.Engine.Secure(domain));
+            var row = _all.FirstOrDefault(r => string.Equals(r.Domain, domain, StringComparison.OrdinalIgnoreCase));
+            if (row is not null) CatalogSync.UpdateHttps(row.Name, true);
+        }
     }
 
     private async void Share_Click(object s, RoutedEventArgs e)
@@ -317,7 +323,10 @@ public sealed partial class SiteListControl : UserControl
             PrimaryButtonText = "Apply", CloseButtonText = "Cancel", XamlRoot = this.XamlRoot,
         };
         if (await dlg.ShowAsync() == ContentDialogResult.Primary && combo.SelectedItem is string ver)
+        {
             await Op(() => EngineHost.Instance.Engine.SitePhp(name, ver));
+            CatalogSync.UpdatePhp(name, ver);
+        }
     }
 
     private async void ChangeRoot_Click(object s, RoutedEventArgs e)
@@ -328,8 +337,19 @@ public sealed partial class SiteListControl : UserControl
         await Op(() => EngineHost.Instance.Engine.SiteRoot(name, path));
     }
 
-    private async void Nginx_Click(object s, RoutedEventArgs e)  { var n = Tag(s); await Op(() => EngineHost.Instance.Engine.SiteServer(n, "nginx")); }
-    private async void Apache_Click(object s, RoutedEventArgs e) { var n = Tag(s); await Op(() => EngineHost.Instance.Engine.SiteServer(n, "apache")); }
+    private async void Nginx_Click(object s, RoutedEventArgs e)
+    {
+        var n = Tag(s);
+        await Op(() => EngineHost.Instance.Engine.SiteServer(n, "nginx"));
+        CatalogSync.UpdateWebServer(n, "nginx");
+    }
+
+    private async void Apache_Click(object s, RoutedEventArgs e)
+    {
+        var n = Tag(s);
+        await Op(() => EngineHost.Instance.Engine.SiteServer(n, "apache"));
+        CatalogSync.UpdateWebServer(n, "apache");
+    }
 
     private async void Remove_Click(object s, RoutedEventArgs e)
     {
@@ -361,6 +381,16 @@ public sealed partial class SiteListControl : UserControl
         if (await dlg.ShowAsync() != ContentDialogResult.Primary) return;
         var doPurge = purge.IsChecked == true;
         await Op(() => EngineHost.Instance.Engine.SiteRemove(name, doPurge, doPurge));
+        CatalogSync.Delete(name);
+    }
+
+    private async void FixHosts_Click(object s, RoutedEventArgs e)
+    {
+        var domain = Tag(s);
+        Busy.IsActive = true;
+        var (_, output) = await EngineHost.Instance.RunCaptured(() => EngineHost.Instance.Engine.EnsureHosts(domain));
+        Busy.IsActive = false;
+        await Info("Fix Hosts File", string.IsNullOrWhiteSpace(output) ? "Done" : output.Trim());
     }
 
     private async void EnvEditor_Click(object s, RoutedEventArgs e)
@@ -441,6 +471,77 @@ public sealed partial class SiteListControl : UserControl
         if (await dlg.ShowAsync() == ContentDialogResult.Primary)
         {
             await Op(() => EngineHost.Instance.Engine.SiteRestore(name, file));
+        }
+    }
+}
+
+/// <summary>Keep the SQLite Sites catalog in sync when site actions run from the Dashboard list.</summary>
+file static class CatalogSync
+{
+    private static readonly SitesRepository Repo = SitesRepository.Instance;
+
+    public static void Delete(string name)
+    {
+        try
+        {
+            Repo.Delete(name);
+            Log.Info($"Delete site '{name}'");
+            SitesViewModel.Instance.RemoveSite(name);
+        }
+        catch (BhException ex)
+        {
+            Log.Error($"Delete site '{name}' database error", ex);
+        }
+    }
+
+    public static void UpdatePhp(string name, string php)
+    {
+        try
+        {
+            var rec = Repo.GetByName(name);
+            if (rec is null) return;
+            rec.PhpVersion = php;
+            Repo.Update(rec);
+            Log.Info($"Update site '{name}' (php={php})");
+            SitesViewModel.Instance.ApplyCatalogRecord(rec);
+        }
+        catch (BhException ex)
+        {
+            Log.Error($"Update site '{name}' database error", ex);
+        }
+    }
+
+    public static void UpdateWebServer(string name, string server)
+    {
+        try
+        {
+            var rec = Repo.GetByName(name);
+            if (rec is null) return;
+            rec.WebServer = server;
+            Repo.Update(rec);
+            Log.Info($"Update site '{name}' (server={server})");
+            SitesViewModel.Instance.ApplyCatalogRecord(rec);
+        }
+        catch (BhException ex)
+        {
+            Log.Error($"Update site '{name}' database error", ex);
+        }
+    }
+
+    public static void UpdateHttps(string name, bool https)
+    {
+        try
+        {
+            var rec = Repo.GetByName(name);
+            if (rec is null) return;
+            rec.Https = https;
+            Repo.Update(rec);
+            Log.Info($"Update site '{name}' (https={https})");
+            SitesViewModel.Instance.ApplyCatalogRecord(rec);
+        }
+        catch (BhException ex)
+        {
+            Log.Error($"Update site '{name}' database error", ex);
         }
     }
 }

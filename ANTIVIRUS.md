@@ -6,7 +6,7 @@ both are easy to clear.
 
 ## 1. SmartScreen "unknown publisher" on the installer
 
-When you run `BanglaHost-Setup-0.1.0.exe`, Windows SmartScreen may show a blue "Windows
+When you run `BanglaHost-Setup-letest version.exe`, Windows SmartScreen may show a blue "Windows
 protected your PC" dialog. Click **More info → Run anyway**. This is expected for any
 unsigned installer and does **not** mean the file is unsafe.
 

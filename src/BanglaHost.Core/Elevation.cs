@@ -27,7 +27,11 @@ public static class Elevation
     public static bool Run(string verb, params string[] args)
     {
         var helper = HelperPath();
-        if (helper is null) return false;
+        if (helper is null)
+        {
+            Log.Warn("Elevation: banglahost-elevate.exe not found next to the running app");
+            return false;
+        }
         try
         {
             var psi = new ProcessStartInfo

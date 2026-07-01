@@ -1,5 +1,7 @@
 using System;
 using System.Linq;
+using BanglaHost.App.ViewModels;
+using BanglaHost.Core;
 using Microsoft.UI.Xaml;
 
 namespace BanglaHost.App;
@@ -29,6 +31,13 @@ public partial class App : Application
         {
             try { BanglaHost.Core.SiteDbHostFix.Run(BanglaHost.Core.Config.Load().SitesRoot); } catch { }
         });
+
+        // Ensure the Sites catalog DB exists and load saved sites immediately (no need to open the Sites tab first).
+        _ = System.Threading.Tasks.Task.Run(() =>
+        {
+            try { SitesRepository.Instance.EnsureCreated(); } catch (Exception ex) { Log.Error("DB: startup init failed", ex); }
+        });
+        _ = SitesViewModel.Instance.LoadAsync();
 
         // Optionally bring all services up on launch (Settings → Start services when BanglaHost launches).
         if (BanglaHost.Core.Config.Load().StartServicesOnLaunch)

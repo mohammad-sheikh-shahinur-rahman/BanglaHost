@@ -5,6 +5,12 @@
     <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>BanglaHost.Core</RootNamespace>
     <AssemblyName>BanglaHost.Core</AssemblyName>
-    <Version>1.1.0</Version>
+    <!-- Version is centralized in Directory.Build.props (single source of truth). -->
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Local catalog DB for the Sites module (auto-creates the table on first use).
+         Microsoft.Data.Sqlite bundles the native e_sqlite3, so no extra setup. -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+  </ItemGroup>
 </Project>
